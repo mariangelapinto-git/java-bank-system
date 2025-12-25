@@ -22,10 +22,23 @@ public class Producto {
     public void setNombre(String nombre) { this.nombre = nombre; }
 
     public double getPrecio() { return precio; }
-    public void setPrecio(double precio) { this.precio = precio; }
+    public void setPrecio(double precio) {
+        if (precio < 0) {
+            System.out.println("Error: El precio no puede ser negativo.");
+            this.precio = 0;
+        } else {
+            this.precio = precio;
+        }
+    }
 
     public int getCantidad() { return cantidad; }
-    public void setCantidad(int cantidad) { this.cantidad = cantidad; }
+    public void setCantidad(int cantidad) {
+        if (cantidad < 0) {
+            this.cantidad = 0;
+        } else {
+            this.cantidad = cantidad;
+        }
+    }
 
     // toString: Para que al imprimir el objeto no salga algo raro como "Producto@123"
     @Override

@@ -22,4 +22,9 @@ public class InventarioService {
             }
         }
     }
+
+    public boolean eliminarProducto(int id) {
+        // Busca el producto por ID y lo elimina si lo encuentra
+        return productos.removeIf(p -> p.getId() == id);
+    }
 }

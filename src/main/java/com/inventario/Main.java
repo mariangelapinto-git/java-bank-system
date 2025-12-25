@@ -18,6 +18,7 @@ public class Main {
             System.out.println("\n1. Agregar Producto");
             System.out.println("2. Ver Inventario");
             System.out.println("3. Salir");
+            System.out.println("4. Eliminar Producto");
             System.out.print("Elige una opción: ");
             opcion = leer.nextInt();
 
@@ -50,6 +51,17 @@ public class Main {
 
                 case 3:
                     System.out.println("Saliendo del sistema...");
+                    break;
+
+                case 4:
+                    System.out.print("Ingrese el ID del producto a eliminar: ");
+                    int idEliminar = leer.nextInt();
+                    boolean eliminado = servicio.eliminarProducto(idEliminar);
+                    if (eliminado) {
+                        System.out.println("Producto borrado exitosamente.");
+                    } else {
+                        System.out.println("No se encontró ningún producto con ese ID.");
+                    }
                     break;
 
                 default:
