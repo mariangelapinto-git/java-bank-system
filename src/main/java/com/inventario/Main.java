@@ -1,7 +1,7 @@
 package com.inventario;
 
 import model.Producto;
-import com.inventario.service.InventarioService;
+import service.InventarioService;
 import java.util.Scanner;
 
 public class Main {
@@ -19,6 +19,7 @@ public class Main {
             System.out.println("2. Ver Inventario");
             System.out.println("3. Salir");
             System.out.println("4. Eliminar Producto");
+            System.out.println("5. Actualizar Producto");
             System.out.print("Elige una opción: ");
             opcion = leer.nextInt();
 
@@ -54,13 +55,27 @@ public class Main {
                     break;
 
                 case 4:
-                    System.out.print("Ingrese el ID del producto a eliminar: ");
-                    int idEliminar = leer.nextInt();
-                    boolean eliminado = servicio.eliminarProducto(idEliminar);
-                    if (eliminado) {
-                        System.out.println("Producto borrado exitosamente.");
+                    System.out.print("ID a eliminar: ");
+                    int idEli = leer.nextInt();
+                    if (servicio.eliminarProducto(idEli)) {
+                        System.out.println("¡Eliminado!");
                     } else {
-                        System.out.println("No se encontró ningún producto con ese ID.");
+                        System.out.println("ID no encontrado.");
+                    }
+                    break;
+
+                case 5:
+                    System.out.print("ID a actualizar: ");
+                    int idAct = leer.nextInt();
+                    System.out.print("Nuevo precio: ");
+                    double np = leer.nextDouble();
+                    System.out.print("Nueva cantidad: ");
+                    int nc = leer.nextInt();
+
+                    if (servicio.actualizarProducto(idAct, np, nc)) {
+                        System.out.println("¡Actualizado!");
+                    } else {
+                        System.out.println("ID no encontrado.");
                     }
                     break;
 
