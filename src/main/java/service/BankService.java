@@ -1,7 +1,7 @@
 package service;
 
 import com.bank.util.ConexionBD;
-import model.Cuenta;
+import model.*;
 import java.sql.*;
 
 public class BankService {
@@ -90,6 +90,7 @@ public class BankService {
     //5. CONSULTAR SALDO
 
     public void consultarSaldo(int id) {
+        if (!esCuentaActiva(id)) return;
         String sql = "SELECT titular, saldo FROM cuentas WHERE id = ?";
 
         try (Connection con = ConexionBD.obtenerConexion();
@@ -121,6 +122,9 @@ public class BankService {
             return;
         }
 
+        if (!esCuentaActiva(cuentaId)) {
+            return;
+        }
         // DOS SQLs: uno para actualizar el saldo y otro para el historial
         String sqlUpdate = "UPDATE cuentas SET saldo = saldo + ? WHERE id = ?";
         String sqlInsert = "INSERT INTO transacciones (cuenta_id, tipo, monto) VALUES (?, 'DEPOSITO', ?)";
@@ -167,6 +171,9 @@ public class BankService {
             return;
         }
 
+        if (!esCuentaActiva(cuentaId)) {
+            return;
+        }
         // Consultar el saldo actual
         String sqlCheck = "SELECT saldo FROM cuentas WHERE id = ?";
         String sqlUpdate = "UPDATE cuentas SET saldo = saldo - ? WHERE id = ?";
@@ -228,6 +235,9 @@ public class BankService {
             System.out.println("No puedes transferir a la misma cuenta.");
             return;
         }
+
+        if (!esCuentaActiva(idOrigen)) return;
+        if (!esCuentaActiva(idDestino)) return;
 
         String sqlCheck = "SELECT saldo FROM cuentas WHERE id = ?";
         String sqlRestar = "UPDATE cuentas SET saldo = saldo - ? WHERE id = ?";
@@ -343,5 +353,97 @@ public class BankService {
         } catch (SQLException e) {
             System.out.println("Error al generar el extracto: " + e.getMessage());
         }
+    }
+
+    // Este método centraliza la validación de estado
+    private boolean esCuentaActiva(int id) {
+        String sql = "SELECT estado FROM cuentas WHERE id = ?";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                String estado = rs.getString("estado");
+                if (estado.equals("ACTIVO")) {
+                    return true;
+                } else {
+                    System.out.println("Operación denegada: La cuenta está " + estado);
+                }
+            } else {
+                System.out.println("Error: La cuenta con ID " + id + " no existe.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Error al validar estado: " + e.getMessage());
+        }
+        return false; // Si no existe o no está activa, bloqueamos la operación
+    }
+
+    //-----------------------------ANEXANDO CODIGO PARA MEJORAR CONTROL DE CUENTAS--------
+
+
+    //AUDITORIAS-------------------
+    // Para ver la lista completa
+
+    public void listarTodasLasCuentas() {
+        String sql = "SELECT id, numero_cuenta, titular, saldo, estado FROM cuentas";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            System.out.println("\n--- AUDITORÍA GENERAL DE CUENTAS ---");
+            System.out.printf("%-5s | %-15s | %-20s | %-10s | %-10s%n", "ID", "Nro Cuenta", "Titular", "Saldo", "Estado");
+
+            while (rs.next()) {
+                System.out.printf("%-5d | %-15s | %-20s | %-10.2f | %-10s%n",
+                        rs.getInt("id"), rs.getString("numero_cuenta"),
+                        rs.getString("titular"), rs.getDouble("saldo"),
+                        rs.getString("estado"));
+            }
+        } catch (SQLException e) {
+            System.out.println("Error en auditoría: " + e.getMessage());
+        }
+    }
+
+    // Para reactivar una cuenta cerrada
+    public void reactivarCuenta(int id) {
+        String sql = "UPDATE cuentas SET estado = 'ACTIVO' WHERE id = ?";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, id);
+            int filas = ps.executeUpdate();
+
+            if (filas > 0) {
+                System.out.println("Cuenta ID " + id + " reactivada exitosamente.");
+            } else {
+                System.out.println("No se encontró la cuenta.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Error al reactivar: " + e.getMessage());
+        }
+    }
+
+    //--------------------USUARIO---------------------
+
+    public Usuario login(String user, String pass) {
+        String sql = "SELECT username, rol FROM usuarios WHERE username = ? AND password = ?";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setString(1, user);
+            ps.setString(2, pass);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                // Retornamos un nuevo objeto Usuario con los datos de la DB
+                return new Usuario(rs.getString("username"), rs.getString("rol"));
+            }
+        } catch (SQLException e) {
+            System.out.println("Error en base de datos durante login: " + e.getMessage());
+        }
+        return null; // Si no lo encuentra o hay error, devuelve null
     }
 }
