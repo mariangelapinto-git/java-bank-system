@@ -20,7 +20,8 @@ public class Main {
             System.out.println("3. Salir");
             System.out.println("4. Eliminar Producto");
             System.out.println("5. Actualizar Producto");
-            System.out.print("Elige una opción: ");
+            System.out.print("6. Definir el límite de stock para la alerta (ej. 5): ");
+            System.out.print("\nElige una opción: ");
             opcion = leer.nextInt();
 
             leer.nextLine(); // Limpiar el buffer después de leer un número
@@ -73,6 +74,12 @@ public class Main {
                     } else {
                         System.out.println("ID no encontrado.");
                     }
+                    break;
+
+                case 6:
+                    System.out.print("Coloque el límite de stock para la alerta (ej. 5): ");
+                    int limite = leer.nextInt();
+                    servicio.reporteStockBajo(limite);
                     break;
 
                 default:

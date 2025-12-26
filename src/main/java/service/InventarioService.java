@@ -93,5 +93,34 @@ public class InventarioService {
         }
     }
 
+    //METODO Para crear alerta de stock bajo
+    public void reporteStockBajo(int limite) {
+
+        String sql = "SELECT * FROM productos WHERE cantidad < ?";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, limite);
+            ResultSet rs = ps.executeQuery();
+
+            System.out.println("\n--- REPORTES DE STOCK CRÍTICO (Menos de " + limite + " unidades) ---");
+            System.out.printf("%-5s | %-20s | %-10s%n", "ID", "Nombre", "Cantidad");
+            System.out.println("---------------------------------------------------------");
+
+            boolean hayProductos = false;
+            while (rs.next()) {
+                hayProductos = true;
+                System.out.printf("%-5d | %-20s | %-10d%n",
+                        rs.getInt("id"), rs.getString("nombre"), rs.getInt("cantidad"));
+            }
+
+            if (!hayProductos) {
+                System.out.println("Todo en orden. No hay productos con stock bajo.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Error en el reporte de stock: " + e.getMessage());
+        }
+    }
 
 }
