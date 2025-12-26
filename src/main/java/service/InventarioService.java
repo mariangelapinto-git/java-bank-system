@@ -9,19 +9,27 @@ public class InventarioService {
     // 1. LISTAR
     public void listarProductos() {
         String sql = "SELECT * FROM productos";
+
         try (Connection con = ConexionBD.obtenerConexion();
              PreparedStatement ps = con.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
 
-            System.out.println("\n--- Inventario en Base de Datos ---");
+            System.out.println("\n--- INVENTARIO ACTUAL ---");
+            System.out.printf("%-5s | %-20s | %-10s | %-10s%n", "ID", "Nombre", "Precio", "Stock");
+            System.out.println("----------------------------------------------------------");
+
             while (rs.next()) {
-                System.out.println("ID: " + rs.getInt("id") +
-                        " | Nombre: " + rs.getString("nombre") +
-                        " | Precio: $" + rs.getDouble("precio") +
-                        " | Cantidad: " + rs.getInt("cantidad"));
+                int id = rs.getInt("id");
+                String nombre = rs.getString("nombre");
+                double precio = rs.getDouble("precio");
+
+                // CAMBIA "stock" POR "cantidad"
+                int stock = rs.getInt("cantidad");
+
+                System.out.printf("%-5d | %-20s | %-10.2f | %-10d%n", id, nombre, precio, stock);
             }
         } catch (SQLException e) {
-            System.out.println("Error al listar: " + e.getMessage());
+            System.out.println("Error al listar productos: " + e.getMessage());
         }
     }
 
@@ -44,17 +52,23 @@ public class InventarioService {
     }
 
     // 3. ELIMINAR
-    public boolean eliminarProducto(int id) {
+    public void eliminarProducto(int id) {
         String sql = "DELETE FROM productos WHERE id = ?";
+
         try (Connection con = ConexionBD.obtenerConexion();
              PreparedStatement ps = con.prepareStatement(sql)) {
 
             ps.setInt(1, id);
             int filasAfectadas = ps.executeUpdate();
-            return filasAfectadas > 0;
+
+            if (filasAfectadas > 0) {
+                System.out.println("Producto con ID " + id + " eliminado correctamente.");
+            } else {
+                System.out.println("No se encontró ningún producto con el ID " + id);
+            }
+
         } catch (SQLException e) {
-            System.out.println("Error al eliminar: " + e.getMessage());
-            return false;
+            System.out.println("Error al eliminar producto: " + e.getMessage());
         }
     }
 
@@ -78,4 +92,6 @@ public class InventarioService {
             return false;
         }
     }
+
+
 }

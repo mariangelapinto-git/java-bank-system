@@ -55,13 +55,9 @@ public class Main {
                     break;
 
                 case 4:
-                    System.out.print("ID a eliminar: ");
-                    int idEli = leer.nextInt();
-                    if (servicio.eliminarProducto(idEli)) {
-                        System.out.println("¡Eliminado!");
-                    } else {
-                        System.out.println("ID no encontrado.");
-                    }
+                    System.out.print("Ingrese el ID del producto a eliminar: ");
+                    int idEliminar = leer.nextInt();
+                    servicio.eliminarProducto(idEliminar);
                     break;
 
                 case 5:
