@@ -1,2 +1,2 @@
 # inventario-java-backend
-Sistema de gestión de inventario. Evolucionando de Java Core a Spring Boot
+Sistema de gestión bancario. Evolucionando de Java Core a Spring Boot
