@@ -34,11 +34,14 @@ public class Main {
             System.out.println("7. Transferencia");
             System.out.println("8. Ver extracto bancario");
             System.out.println("9. Panel de Administración (Auditoría/Reactivar)");
-            System.out.println("10. Salir");
+            System.out.println("10. Generar PDF");
+            System.out.println("11. Ejecutar Cierre de Mes (Intereses)");
+            System.out.println("12. Salir");
 
             opcion = leerEntero(leer, "\nElige una opción: ");
 
             switch (opcion) {
+
                 case 1:
                     int id = leerEntero(leer, "Ingrese ID único: ");
                     leer.nextLine();
@@ -46,8 +49,20 @@ public class Main {
                     String numCuenta = leer.nextLine();
                     System.out.print("Nombre del Titular: ");
                     String titular = leer.nextLine();
+
+                    // --- NUEVOS CAMPOS QUE DEBES PEDIR ---
+                    System.out.print("Cédula/RIF: ");
+                    String cedula = leer.nextLine();
+                    System.out.print("Dirección: ");
+                    String direccion = leer.nextLine();
+                    System.out.print("Teléfono: ");
+                    String telefono = leer.nextLine();
+                    // -------------------------------------
+
                     double saldoInicial = leerDouble(leer, "Depósito Inicial: ");
-                    Cuenta nuevaCuenta = new Cuenta(id, numCuenta, titular, saldoInicial);
+
+                    // AQUÍ ESTABA EL ERROR: Ahora pasamos los 7 parámetros
+                    Cuenta nuevaCuenta = new Cuenta(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
                     servicio.crearCuenta(nuevaCuenta);
                     break;
 
@@ -108,6 +123,19 @@ public class Main {
                     break;
 
                 case 10:
+                    idEx = leerEntero(leer, "Ingrese el ID de la cuenta para generar PDF: ");
+                    servicio.generarReportePDF(idEx); // Cambiamos el método antiguo por el nuevo
+                    break;
+
+                case 11:
+                    if (usuarioLogueado.getRol().equals("ADMIN")) {
+                        servicio.ejecutarInteresesBatch();
+                    } else {
+                        System.out.println("Acceso denegado: Solo el Administrador puede cerrar el mes.");
+                    }
+                    break;
+
+                case 12:
                     System.out.println("¡Gracias por usar JavaBank, " + usuarioLogueado.getUsername() + "!");
                     break;
 
@@ -115,7 +143,7 @@ public class Main {
                     System.out.println("Opción no válida.");
             }
 
-        } while (opcion != 10);
+        } while (opcion != 12);
 
         leer.close();
     }
