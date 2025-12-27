@@ -1,124 +1,18 @@
 package service;
 
 import com.bank.util.ConexionBD;
-import com.itextpdf.layout.element.Text;
 import model.*;
 import java.sql.*;
-import com.itextpdf.kernel.pdf.PdfDocument;
-import com.itextpdf.kernel.pdf.PdfWriter;
-import com.itextpdf.layout.Document;
-import com.itextpdf.layout.element.Paragraph;
-import com.itextpdf.layout.element.Table;
-import com.itextpdf.layout.properties.UnitValue;
-import java.sql.Timestamp;
+import com.itextpdf.text.*;
+import com.itextpdf.text.pdf.*;
+import java.io.FileOutputStream;
+import org.mindrot.jbcrypt.BCrypt;
 
 public class BankService {
 
-    // 1. LISTAR CUENTAS
-    public void listarCuentas() {
-        // Seguimos filtrando solo las cuentas ACTIVAS
-        String sql = "SELECT * FROM cuentas WHERE estado = 'ACTIVO'";
 
-        try (Connection con = ConexionBD.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
+    // PROCEDIMIENTO DEL CASE 1. ABRIR CUENTA NUEVA-------------------------
 
-            System.out.println("\n" + "=".repeat(85));
-            System.out.println("                LISTADO DE CUENTAS BANCARIAS ACTIVAS");
-            System.out.println("=".repeat(85));
-            // Añadimos la columna Cédula/RIF
-            System.out.printf("%-5s | %-15s | %-15s | %-20s | %-10s%n",
-                    "ID", "Cédula/RIF", "Nro Cuenta", "Titular", "Saldo");
-            System.out.println("-".repeat(85));
-
-            while (rs.next()) {
-                int id = rs.getInt("id");
-                String cedula = rs.getString("cedula"); // Nuevo dato
-                String nro = rs.getString("numero_cuenta");
-                String titular = rs.getString("titular");
-                double saldo = rs.getDouble("saldo");
-
-                // Imprimimos la fila con el nuevo campo
-                System.out.printf("%-5d | %-15s | %-15s | %-20s | %-10.2f%n",
-                        id, cedula, nro, titular, saldo);
-            }
-            System.out.println("=".repeat(85));
-
-        } catch (SQLException e) {
-            System.out.println("Error al listar cuentas: " + e.getMessage());
-        }
-    }
-
-    //================================================================
-    //---------------GENERADOR DE PDF--------------------------------
-
-    public void generarReportePDF(int cuentaId) {
-        if (!esCuentaActiva(cuentaId)) return;
-
-        String nombreArchivo = "Estado_Cuenta_" + cuentaId + ".pdf";
-        String sqlCuenta = "SELECT * FROM cuentas WHERE id = ?";
-        String sqlTrans = "SELECT tipo, monto, fecha_hora FROM transacciones WHERE cuenta_id = ? ORDER BY fecha_hora DESC";
-
-        try (Connection con = ConexionBD.obtenerConexion()) {
-
-            // --- 1. CONSULTAMOS LOS DATOS DE LA CUENTA ---
-            try (PreparedStatement psC = con.prepareStatement(sqlCuenta)) {
-                psC.setInt(1, cuentaId);
-                ResultSet rsC = psC.executeQuery(); // Aquí se crea rsC
-
-                if (rsC.next()) { // Bloque donde rsC ES VÁLIDO
-
-                    // Extraemos los datos a variables locales (Más seguro)
-                    String titular = rsC.getString("titular");
-                    String cedula = rsC.getString("cedula");
-                    String direccion = rsC.getString("direccion");
-                    String telefono = rsC.getString("telefono");
-
-                    // --- 2. CONFIGURAMOS EL PDF (DENTRO del bloque donde rsC existe) ---
-                    PdfWriter writer = new PdfWriter(nombreArchivo);
-                    PdfDocument pdf = new PdfDocument(writer);
-                    Document documento = new Document(pdf);
-
-                    // Escribimos en el PDF usando las variables que acabamos de sacar
-                    documento.add(new Paragraph("JAVABANK SYSTEM - REPORTE OFICIAL").setBold().setFontSize(18));
-                    documento.add(new Paragraph("Titular: " + titular));
-                    documento.add(new Paragraph("Cédula/RIF: " + cedula));
-                    documento.add(new Paragraph("Dirección: " + direccion));
-                    documento.add(new Paragraph("Teléfono: " + telefono));
-                    documento.add(new Paragraph("\n"));
-
-                    // --- 3. TABLA DE MOVIMIENTOS ---
-                    Table tabla = new Table(UnitValue.createPercentArray(new float[]{2, 2, 2})).useAllAvailableWidth();
-                    tabla.addHeaderCell("Fecha");
-                    tabla.addHeaderCell("Monto");
-                    tabla.addHeaderCell("Operación");
-
-                    try (PreparedStatement psT = con.prepareStatement(sqlTrans)) {
-                        psT.setInt(1, cuentaId);
-                        ResultSet rsT = psT.executeQuery();
-                        while (rsT.next()) {
-                            tabla.addCell(rsT.getTimestamp("fecha_hora").toString());
-                            tabla.addCell(String.format("%.2f", rsT.getDouble("monto")));
-                            tabla.addCell(rsT.getString("tipo"));
-                        }
-                    }
-
-                    documento.add(tabla);
-                    documento.close();
-                    System.out.println("PDF generado con éxito.");
-
-                } else {
-                    System.out.println("No se encontró información para la cuenta ID: " + cuentaId);
-                }
-            } // Aquí rsC se cierra automáticamente al salir del try-with-resources
-
-        } catch (Exception e) {
-            System.out.println("Error: " + e.getMessage());
-            e.printStackTrace(); // Dirá exactamente qué línea falla
-        }
-    }
-
-    // 2. CREAR CUENTA
     public void crearCuenta(Cuenta cuenta) {
         String sql = "INSERT INTO cuentas (id, numero_cuenta, titular, cedula, direccion, telefono, saldo, estado) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVO')";
         try (Connection con = ConexionBD.obtenerConexion();
@@ -137,11 +31,109 @@ public class BankService {
         }
     }
 
-    // 3. CERRAR CUENTA
-    public void cerrarCuenta(int id) {
-        // Cambio: En lugar de borrar, cambiamos el estado
-        String sql = "UPDATE cuentas SET estado = 'CERRADO' WHERE id = ?";
+    // PROCEDIMIENTO DEL CASE 2. LISTAR CUENTAS
+    public void listarCuentas() {
 
+        String sql = "SELECT * FROM cuentas WHERE estado = 'ACTIVO'";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            System.out.println("\n" + "=".repeat(85));
+            System.out.println("                LISTADO DE CUENTAS BANCARIAS ACTIVAS");
+            System.out.println("=".repeat(85));
+            System.out.printf("%-5s | %-15s | %-15s | %-20s | %-10s%n",
+                    "ID", "Cédula/RIF", "Nro Cuenta", "Titular", "Saldo");
+            System.out.println("-".repeat(85));
+
+            while (rs.next()) {
+                int id = rs.getInt("id");
+                String cedula = rs.getString("cedula"); // Nuevo dato
+                String nro = rs.getString("numero_cuenta");
+                String titular = rs.getString("titular");
+                double saldo = rs.getDouble("saldo");
+
+                System.out.printf("%-5d | %-15s | %-15s | %-20s | %-10.2f%n",
+                        id, cedula, nro, titular, saldo);
+            }
+            System.out.println("=".repeat(85));
+
+        } catch (SQLException e) {
+            System.out.println("Error al listar cuentas: " + e.getMessage());
+        }
+    }
+
+    //=====================================================================
+    //========================METODO COMPLEMENTO===========================
+    //=====================================================================
+
+    public void listarTodasLasCuentas() {
+        String sql = "SELECT id, numero_cuenta, titular, saldo, estado FROM cuentas";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            System.out.println("\n--- AUDITORÍA GENERAL DE CUENTAS ---");
+            System.out.printf("%-5s | %-15s | %-20s | %-10s | %-10s%n", "ID", "Nro Cuenta", "Titular", "Saldo", "Estado");
+
+            while (rs.next()) {
+                System.out.printf("%-5d | %-15s | %-20s | %-10.2f | %-10s%n",
+                        rs.getInt("id"), rs.getString("numero_cuenta"),
+                        rs.getString("titular"), rs.getDouble("saldo"),
+                        rs.getString("estado"));
+            }
+        } catch (SQLException e) {
+            System.out.println("Error en auditoría: " + e.getMessage());
+        }
+    }
+
+
+    //PROCEDIMIENTO DEL CASE 3. CERRAR CUENTAS---------------------------
+
+    public void cerrarCuenta(int id) {
+        // 1. Primero verificamos si tiene saldo cero
+        String sqlCheck = "SELECT saldo FROM cuentas WHERE id = ?";
+        String sqlUpdate = "UPDATE cuentas SET estado = 'CERRADO' WHERE id = ?";
+
+        try (Connection con = ConexionBD.obtenerConexion()) {
+
+            // Verificación de saldo
+            try (PreparedStatement psCheck = con.prepareStatement(sqlCheck)) {
+                psCheck.setInt(1, id);
+                ResultSet rs = psCheck.executeQuery();
+
+                if (rs.next()) {
+                    double saldoActual = rs.getDouble("saldo");
+                    if (saldoActual > 0) {
+                        System.err.println("No se puede cerrar: La cuenta aún tiene un saldo de $" + saldoActual);
+                        return;
+                    }
+                }
+            }
+
+
+            try (PreparedStatement psUpdate = con.prepareStatement(sqlUpdate)) {
+                psUpdate.setInt(1, id);
+                int filas = psUpdate.executeUpdate();
+
+                if (filas > 0) {
+                    System.out.println("La cuenta ID " + id + " ha sido CERRADA exitosamente.");
+                } else {
+                    System.out.println("No se encontró la cuenta.");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error: " + e.getMessage());
+        }
+    }
+
+    //=======================================================================
+    //==================METODO COMPLEMENTARIO================================
+    //=======================================================================
+
+    public void reactivarCuenta(int id) {
+        String sql = "UPDATE cuentas SET estado = 'ACTIVO' WHERE id = ?";
         try (Connection con = ConexionBD.obtenerConexion();
              PreparedStatement ps = con.prepareStatement(sql)) {
 
@@ -149,32 +141,17 @@ public class BankService {
             int filas = ps.executeUpdate();
 
             if (filas > 0) {
-                System.out.println("La cuenta ID " + id + " ha sido CERRADA (sus datos permanecen para auditoría).");
+                System.out.println("Cuenta ID " + id + " reactivada exitosamente.");
             } else {
                 System.out.println("No se encontró la cuenta.");
             }
         } catch (SQLException e) {
-            System.out.println("Error: " + e.getMessage());
+            System.out.println("Error al reactivar: " + e.getMessage());
         }
     }
 
-    // 4. ACTUALIZAR SALDO (Muy importante para depósitos/retiros)
-    public boolean actualizarSaldo(int id, double nuevoSaldo) {
-        String sql = "UPDATE cuentas SET saldo = ? WHERE id = ?";
-        try (Connection con = ConexionBD.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
 
-            ps.setDouble(1, nuevoSaldo);
-            ps.setInt(2, id);
-
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) {
-            System.out.println("Error al actualizar saldo: " + e.getMessage());
-            return false;
-        }
-    }
-
-    //5. CONSULTAR SALDO
+    //PROCEDIMIENTO DEL CASE 4. CONSULTAR SALDO ------------------------------
 
     public void consultarSaldo(int id) {
         if (!esCuentaActiva(id)) return;
@@ -201,7 +178,28 @@ public class BankService {
         }
     }
 
-    //DEPOSITO (TRANSACCIONES)
+    //================================================================
+    //=========================METODOS COMPLEMENTOS===================
+    //==================================================================
+
+
+    // METODO PARA ACTUALIZAR EL SALDO
+    public boolean actualizarSaldo(int id, double nuevoSaldo) {
+        String sql = "UPDATE cuentas SET saldo = ? WHERE id = ?";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setDouble(1, nuevoSaldo);
+            ps.setInt(2, id);
+
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.out.println("Error al actualizar saldo: " + e.getMessage());
+            return false;
+        }
+    }
+
+    //PROCEDIMIENTO DEL CASE 5. DEPOSITO ----------------------------
 
     public void depositar(int cuentaId, double monto) {
         if (monto <= 0) {
@@ -217,7 +215,6 @@ public class BankService {
         String sqlInsert = "INSERT INTO transacciones (cuenta_id, tipo, monto) VALUES (?, 'DEPOSITO', ?)";
 
         try (Connection con = ConexionBD.obtenerConexion()) {
-            // Desactivamos el auto-commit para manejar la transacción manualmente
             con.setAutoCommit(false);
 
             try (PreparedStatement psUpdate = con.prepareStatement(sqlUpdate);
@@ -237,12 +234,12 @@ public class BankService {
                     con.commit(); // Si todo salió bien, guardamos los cambios permanentemente
                     System.out.println("¡Depósito exitoso de $" + monto + "!");
                 } else {
-                    con.rollback(); // Si la cuenta no existe, deshacemos todo
+                    con.rollback(); // Si la cuenta no existe, se deshace todo
                     System.out.println("Error: No se encontró la cuenta con ID " + cuentaId);
                 }
 
             } catch (SQLException e) {
-                con.rollback(); // Si hay error en el SQL, deshacemos todo
+                con.rollback(); // Si hay error en el SQL, se deshace todo
                 System.out.println("Error en la transacción: " + e.getMessage());
             }
         } catch (SQLException e) {
@@ -250,7 +247,7 @@ public class BankService {
         }
     }
 
-    //RETIRO (TRANSACCIONES)
+    //PROCEDIMIENTO DEL CASE 6 RETIROS-------------------------------
 
     public void retirar(int cuentaId, double monto) {
         if (monto <= 0) {
@@ -267,7 +264,7 @@ public class BankService {
         String sqlInsert = "INSERT INTO transacciones (cuenta_id, tipo, monto) VALUES (?, 'RETIRO', ?)";
 
         try (Connection con = ConexionBD.obtenerConexion()) {
-            con.setAutoCommit(false); // Iniciamos transacción manual
+            con.setAutoCommit(false); // Inicia transacción manual
 
             try (PreparedStatement psCheck = con.prepareStatement(sqlCheck);
                  PreparedStatement psUpdate = con.prepareStatement(sqlUpdate);
@@ -291,7 +288,7 @@ public class BankService {
                         psInsert.setDouble(2, monto);
                         psInsert.executeUpdate();
 
-                        con.commit(); // TODO BIEN, SE APLICAN CAMBIOS
+                        con.commit(); // Se aplican los cambios si esta todo perfecto
                         System.out.println("¡Retiro exitoso! Has retirado: $" + monto);
                     } else {
                         System.out.println("Error: Saldo insuficiente. Saldo disponible: $" + saldoActual);
@@ -310,8 +307,101 @@ public class BankService {
         }
     }
 
-    //-----------------------------TRANSFERENCIAS-------------------------
-    //--------------------------------------------------------------------
+    //=======================================================================
+    //============================METODO COMPLEMENTO==========================
+    //========================================================================
+
+    public boolean validarReglasDeRetiro(int cuentaId, double montoARetirar) {
+        String sql = "SELECT saldo, saldo_minimo, limite_diario FROM cuentas WHERE id = ?";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, cuentaId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                double saldoActual = rs.getDouble("saldo");
+                double saldoMinimo = rs.getDouble("saldo_minimo");
+                double limiteDiario = rs.getDouble("limite_diario");
+
+                if (limiteDiario <= 0) {
+                    System.err.println("Error: Esta cuenta no tiene asignado un límite de retiro diario.");
+                    return false;
+                }
+
+                // REGLA 1: Saldo Mínimo Obligatorio
+                if ((saldoActual - montoARetirar) < saldoMinimo) {
+                    System.err.println("Operación rechazada: El saldo debe quedar al menos en $" + saldoMinimo);
+                    return false;
+                }
+
+                // REGLA 2: Límite Diario
+                double yaRetiradoHoy = obtenerSumaRetirosHoy(cuentaId);
+
+                if ((yaRetiradoHoy + montoARetirar) > limiteDiario) {
+                    double disponible = limiteDiario - yaRetiradoHoy;
+                    System.err.println("Operación rechazada: Límite diario de $" + limiteDiario + " excedido.");
+                    System.err.println("Usted ya retiró $" + yaRetiradoHoy + " hoy. Disponible restante: $" + Math.max(0, disponible));
+                    return false;
+                }
+
+                return true;
+            }
+        } catch (SQLException e) {
+            System.err.println("Error validando reglas de negocio: " + e.getMessage());
+        }
+        return false;
+    }
+
+
+    private double obtenerSumaRetirosHoy(int cuentaId) {
+        // COALESCE(SUM(monto), 0) significa: "Si la suma es nula, devuélveme 0"
+        String sql = "SELECT COALESCE(SUM(monto), 0) FROM transacciones " +
+                "WHERE cuenta_id = ? AND tipo = 'RETIRO' " +
+                "AND DATE(fecha_hora) = CURDATE()";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, cuentaId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getDouble(1);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error en suma de retiros: " + e.getMessage());
+        }
+        return 0.0;
+    }
+
+    private boolean esCuentaActiva(int id) {
+        String sql = "SELECT estado FROM cuentas WHERE id = ?";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                String estado = rs.getString("estado");
+                if (estado.equals("ACTIVO")) {
+                    return true;
+                } else {
+                    System.out.println("Operación denegada: La cuenta está " + estado);
+                }
+            } else {
+                System.out.println("Error: La cuenta con ID " + id + " no existe.");
+            }
+        } catch (SQLException e) {
+            System.out.println("Error al validar estado: " + e.getMessage());
+        }
+        return false;
+    }
+
+    //PROCEDIMIENTO DEL CASE 7. TRANSFERENCIAS-------------------------
+
 
     public void transferir(int idOrigen, int idDestino, double monto) {
         if (monto <= 0) {
@@ -389,10 +479,9 @@ public class BankService {
         }
     }
 
-    //------------------REPORTE BANCARIO-----------------
+    //PROCEDIMIENTO DEL CASE 8 EXTRACTO BANCARIO
 
     public void verExtracto(int cuentaId) {
-        // Primero verificamos si la cuenta existe para dar un mensaje claro
         String sqlCuenta = "SELECT titular, saldo FROM cuentas WHERE id = ?";
         String sqlTrans = "SELECT tipo, monto, fecha_hora FROM transacciones WHERE cuenta_id = ? ORDER BY fecha_hora DESC";
 
@@ -442,99 +531,87 @@ public class BankService {
         }
     }
 
-    // Este método centraliza la validación de estado
-    private boolean esCuentaActiva(int id) {
-        String sql = "SELECT estado FROM cuentas WHERE id = ?";
-        try (Connection con = ConexionBD.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
+    //PROCEDIMIENTO DEL CASE 10. GENERAR PDF
 
-            ps.setInt(1, id);
-            ResultSet rs = ps.executeQuery();
 
-            if (rs.next()) {
-                String estado = rs.getString("estado");
-                if (estado.equals("ACTIVO")) {
-                    return true;
-                } else {
-                    System.out.println("Operación denegada: La cuenta está " + estado);
+    public void generarReportePDF(int cuentaId) {
+
+        String nombreArchivo = "Estado_Cuenta_" + cuentaId + ".pdf";
+        String sqlCuenta = "SELECT * FROM cuentas WHERE id = ?";
+        String sqlTrans = "SELECT tipo, monto, fecha_hora FROM transacciones WHERE cuenta_id = ? ORDER BY fecha_hora DESC LIMIT 10";
+
+        // 1. Crear el documento de iText 5
+        Document documento = new Document(PageSize.A4);
+
+        try (Connection con = ConexionBD.obtenerConexion()) {
+            PdfWriter writer = PdfWriter.getInstance(documento, new FileOutputStream(nombreArchivo));
+
+            // --- AGREGA PIE DE PÁGINA CON FECHA Y HORA ---
+            writer.setPageEvent(new PdfPageEventHelper() {
+                @Override
+                public void onEndPage(PdfWriter writer, Document document) {
+                    String fechaHora = "Impreso el: " + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
+                    ColumnText.showTextAligned(writer.getDirectContent(), Element.ALIGN_RIGHT,
+                            new Phrase(fechaHora, new Font(Font.FontFamily.HELVETICA, 8, Font.ITALIC)),
+                            document.right(), document.bottom() - 15, 0);
                 }
-            } else {
-                System.out.println("Error: La cuenta con ID " + id + " no existe.");
+            });
+
+            documento.open();
+
+            // --- 2. CONSULTAR DATOS DE LA CUENTA ---
+            try (PreparedStatement psC = con.prepareStatement(sqlCuenta)) {
+                psC.setInt(1, cuentaId);
+                ResultSet rsC = psC.executeQuery();
+
+                if (rsC.next()) {
+                    Font fontTitulo = new Font(Font.FontFamily.HELVETICA, 18, Font.BOLD);
+                    documento.add(new Paragraph("JAVABANK SYSTEM - REPORTE OFICIAL", fontTitulo));
+                    documento.add(new Paragraph("--------------------------------------------------------------------------"));
+                    documento.add(new Paragraph("Titular: " + rsC.getString("titular")));
+                    documento.add(new Paragraph("Cédula/RIF: " + rsC.getString("cedula")));
+                    documento.add(new Paragraph("Saldo Actual: $" + String.format("%.2f", rsC.getDouble("saldo"))));
+                    documento.add(new Paragraph("\n"));
+
+                    // --- 3. TABLA DE MOVIMIENTOS ---
+                    PdfPTable tabla = new PdfPTable(3); // 3 columnas
+                    tabla.setWidthPercentage(100);
+
+                    // Cabeceras de la tabla
+                    tabla.addCell(new PdfPCell(new Phrase("Fecha y Hora", new Font(Font.FontFamily.HELVETICA, 12, Font.BOLD))));
+                    tabla.addCell(new PdfPCell(new Phrase("Monto", new Font(Font.FontFamily.HELVETICA, 12, Font.BOLD))));
+                    tabla.addCell(new PdfPCell(new Phrase("Operación", new Font(Font.FontFamily.HELVETICA, 12, Font.BOLD))));
+
+                    try (PreparedStatement psT = con.prepareStatement(sqlTrans)) {
+                        psT.setInt(1, cuentaId);
+                        ResultSet rsT = psT.executeQuery();
+                        while (rsT.next()) {
+                            tabla.addCell(rsT.getTimestamp("fecha_hora").toString());
+                            tabla.addCell("$" + String.format("%.2f", rsT.getDouble("monto")));
+                            tabla.addCell(rsT.getString("tipo")); // Cambiado a tipo_transaccion según tu DB
+                        }
+                    }
+
+                    documento.add(tabla);
+                    System.out.println("PDF '" + nombreArchivo + "' generado con éxito.");
+
+                } else {
+                    documento.add(new Paragraph("No se encontró información para la cuenta ID: " + cuentaId));
+                }
             }
-        } catch (SQLException e) {
-            System.out.println("Error al validar estado: " + e.getMessage());
+
+        } catch (Exception e) {
+            System.err.println("Error crítico al generar PDF: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            if (documento.isOpen()) {
+                documento.close();
+            }
         }
-        return false; // Si no existe o no está activa, bloqueamos la operación
     }
 
-    //-----------------------------ANEXANDO CODIGO PARA MEJORAR CONTROL DE CUENTAS--------
+    //PROCEDIMIENTO PARA EL CASE 11. INTERESES--------------------------------------
 
-
-    //AUDITORIAS-------------------
-    // Para ver la lista completa
-
-    public void listarTodasLasCuentas() {
-        String sql = "SELECT id, numero_cuenta, titular, saldo, estado FROM cuentas";
-        try (Connection con = ConexionBD.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql);
-             ResultSet rs = ps.executeQuery()) {
-
-            System.out.println("\n--- AUDITORÍA GENERAL DE CUENTAS ---");
-            System.out.printf("%-5s | %-15s | %-20s | %-10s | %-10s%n", "ID", "Nro Cuenta", "Titular", "Saldo", "Estado");
-
-            while (rs.next()) {
-                System.out.printf("%-5d | %-15s | %-20s | %-10.2f | %-10s%n",
-                        rs.getInt("id"), rs.getString("numero_cuenta"),
-                        rs.getString("titular"), rs.getDouble("saldo"),
-                        rs.getString("estado"));
-            }
-        } catch (SQLException e) {
-            System.out.println("Error en auditoría: " + e.getMessage());
-        }
-    }
-
-    // Para reactivar una cuenta cerrada
-    public void reactivarCuenta(int id) {
-        String sql = "UPDATE cuentas SET estado = 'ACTIVO' WHERE id = ?";
-        try (Connection con = ConexionBD.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-
-            ps.setInt(1, id);
-            int filas = ps.executeUpdate();
-
-            if (filas > 0) {
-                System.out.println("Cuenta ID " + id + " reactivada exitosamente.");
-            } else {
-                System.out.println("No se encontró la cuenta.");
-            }
-        } catch (SQLException e) {
-            System.out.println("Error al reactivar: " + e.getMessage());
-        }
-    }
-
-    //--------------------USUARIO---------------------
-
-    public Usuario login(String user, String pass) {
-        String sql = "SELECT username, rol FROM usuarios WHERE username = ? AND password = ?";
-
-        try (Connection con = ConexionBD.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-
-            ps.setString(1, user);
-            ps.setString(2, pass);
-            ResultSet rs = ps.executeQuery();
-
-            if (rs.next()) {
-                // Retornamos un nuevo objeto Usuario con los datos de la DB
-                return new Usuario(rs.getString("username"), rs.getString("rol"));
-            }
-        } catch (SQLException e) {
-            System.out.println("Error en base de datos durante login: " + e.getMessage());
-        }
-        return null; // Si no lo encuentra o hay error, devuelve null
-    }
-
-    //===========================INTERESES===========================
     public void ejecutarInteresesBatch() {
         // 3% de interés para cuentas ACTIVAS
         String sqlUpdate = "UPDATE cuentas SET saldo = saldo + (saldo * 0.03) WHERE estado = 'ACTIVO'";
@@ -561,4 +638,178 @@ public class BankService {
             System.out.println("Error en DB: " + e.getMessage());
         }
     }
+
+    //PROCEDIMIENTO DEL CASE 12. DISPONIBILIDAD Y LIMITE DE RETIRO
+
+    public void mostrarDetallesDeCuenta(int cuentaId) {
+        // 1. Consulta para los datos base de la cuenta
+        String sqlCuenta = "SELECT titular, saldo, saldo_minimo, limite_diario FROM cuentas WHERE id = ?";
+
+        // 2. Consulta para lo retirado hoy (tu lógica original integrada)
+        String sqlRetirosHoy = "SELECT SUM(monto) FROM transacciones " +
+                "WHERE cuenta_id = ? AND tipo = 'RETIRO' " +
+                "AND DATE(fecha_hora) = CURDATE()";
+
+        try (Connection con = ConexionBD.obtenerConexion()) {
+
+            double yaRetiradoHoy = 0;
+
+            // Ejecutamos primero el cálculo de retiros del día
+            try (PreparedStatement psR = con.prepareStatement(sqlRetirosHoy)) {
+                psR.setInt(1, cuentaId);
+                ResultSet rsR = psR.executeQuery();
+                if (rsR.next()) {
+                    yaRetiradoHoy = rsR.getDouble(1);
+                }
+            }
+
+            // Ahora consultamos los datos de la cuenta y los mostramos
+            try (PreparedStatement psC = con.prepareStatement(sqlCuenta)) {
+                psC.setInt(1, cuentaId);
+                ResultSet rsC = psC.executeQuery();
+
+                if (rsC.next()) {
+                    double saldo = rsC.getDouble("saldo");
+                    double minimo = rsC.getDouble("saldo_minimo");
+                    double limiteDiario = rsC.getDouble("limite_diario");
+                    double disponibleHoy = limiteDiario - yaRetiradoHoy;
+
+                    System.out.println("\n-------------------------------------------");
+                    System.out.println("       DETALLES DE SEGURIDAD Y SALDO");
+                    System.out.println("-------------------------------------------");
+                    System.out.println("Titular:          " + rsC.getString("titular"));
+                    System.out.println("Saldo Contable:   $" + String.format("%.2f", saldo));
+                    System.out.println("Monto Retirado Hoy: $" + String.format("%.2f", yaRetiradoHoy));
+                    System.out.println("-------------------------------------------");
+                    System.out.println("Saldo Mínimo Requerido:  $" + String.format("%.2f", minimo));
+                    System.out.println("Límite Diario Total:     $" + String.format("%.2f", limiteDiario));
+                    System.out.println("DISPONIBLE PARA RETIRO:  $" + String.format("%.2f", Math.max(0, disponibleHoy)));
+                    System.out.println("-------------------------------------------\n");
+                } else {
+                    System.out.println("La cuenta con ID " + cuentaId + " no existe.");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al mostrar detalles: " + e.getMessage());
+        }
+    }
+
+
+    //=================================================================
+    //=================================================================
+    //--------------------APARTADO PARA USUARIO EN SQL ----------------
+    //-----------------------------------------------------------------
+
+    // NOTA IMPORTANTE----> YA EXISTE (PARA CREAR el usuario una sola vez)
+
+    public boolean registrarUsuario(String user, String pass, String rol) {
+        String sql = "INSERT INTO usuarios (username, password, rol) VALUES (?, ?, ?)";
+        String passwordHaseada = BCrypt.hashpw(pass, BCrypt.gensalt());
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, user);
+            ps.setString(2, passwordHaseada);
+            ps.setString(3, rol);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("Error al registrar: " + e.getMessage());
+            return false;
+        }
+    }
+
+    //==========================OBTENER TOTAL DE USUARIOS SI NO ENCUENTRA CREA UNO======
+
+    public int obtenerTotalUsuarios() {
+        String sql = "SELECT COUNT(*) AS total FROM usuarios";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            if (rs.next()) {
+                return rs.getInt("total");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al contar usuarios: " + e.getMessage());
+        }
+        return 0; // Si hay error o está vacía, devuelve 0
+    }
+
+    //==============================LOGIN DEL USUARIO (ADMIN)=========================
+
+    public Usuario login(String user, String pass) {
+        // 1. Traemos también los campos de control de seguridad
+        String sql = "SELECT id, username, password, rol, intentos_fallidos, bloqueado FROM usuarios WHERE username = ?";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setString(1, user);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                int id = rs.getInt("id");
+                boolean estaBloqueado = rs.getBoolean("bloqueado");
+                int intentos = rs.getInt("intentos_fallidos");
+                String hashAlmacenado = rs.getString("password");
+
+                // 2. Regla de Negocio: Verificar si ya está bloqueado
+                if (estaBloqueado) {
+                    System.err.println("Acceso denegado: El usuario '" + user + "' está bloqueado por seguridad.");
+                    return null;
+                }
+
+                // 3. Verificación de clave con BCrypt
+                if (BCrypt.checkpw(pass, hashAlmacenado)) {
+                    // ÉXITO: Si tenía intentos acumulados, los reseteamos a 0
+                    if (intentos > 0) {
+                        ejecutarUpdateSeguridad(id, 0, false);
+                    }
+                    return new Usuario(rs.getString("username"), rs.getString("rol"));
+                } else {
+                    // ERROR: La clave no coincide, aumentamos contador
+                    manejarFalloAutenticacion(id, intentos);
+                }
+            } else {
+                System.err.println("El usuario no existe.");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error en base de datos durante login: " + e.getMessage());
+        }
+        return null;
+    }
+
+    //=================================================================================
+    //==========================SEGURIDAD PARA BASE DE DATO============================
+    //=================================================================================
+
+
+    //*******************METODO #1
+
+    private void manejarFalloAutenticacion(int userId, int intentosActuales) throws SQLException {
+        int nuevosIntentos = intentosActuales + 1;
+        boolean bloquear = nuevosIntentos >= 3;
+
+        ejecutarUpdateSeguridad(userId, nuevosIntentos, bloquear);
+
+        if (bloquear) {
+            System.err.println("¡ALERTA! El usuario ha sido bloqueado tras 3 intentos fallidos.");
+        } else {
+            System.err.println("Clave incorrecta. Intentos: " + nuevosIntentos + "/3");
+        }
+    }
+
+    //*******************METODO #2
+
+    private void ejecutarUpdateSeguridad(int userId, int intentos, boolean bloquear) throws SQLException {
+        String sqlUpdate = "UPDATE usuarios SET intentos_fallidos = ?, bloqueado = ? WHERE id = ?";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sqlUpdate)) {
+            ps.setInt(1, intentos);
+            ps.setBoolean(2, bloquear);
+            ps.setInt(3, userId);
+            ps.executeUpdate();
+        }
+    }
+
 }

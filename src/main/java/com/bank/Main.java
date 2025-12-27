@@ -13,17 +13,34 @@ public class Main {
 
         System.out.println("--- BIENVENIDO AL SISTEMA BANCARIO ---");
 
-        // --- SISTEMA DE LOGIN ---
+        // ==================================SISTEMA DEL LOGIN=====================
+
         Usuario usuarioLogueado = null;
-        while (usuarioLogueado == null) {
-            System.out.println("\n--- INICIO DE SESIÓN ---");
-            System.out.print("Usuario: ");
-            String user = leer.next();
-            System.out.print("Contraseña: ");
-            String pass = leer.next();
-            usuarioLogueado = servicio.login(user, pass);
+
+        // Verificar si la tabla está vacía para crear el primer administrador
+
+        if (servicio.obtenerTotalUsuarios() == 0) {
+            System.out.println("Configuración inicial: Creando usuario administrador...");
+            servicio.registrarUsuario("admin", "1234", "ADMIN");
+            System.out.println("Usuario 'admin' con clave '1234' creado exitosamente.");
         }
 
+        while (usuarioLogueado == null) {
+            System.out.println("\n--- ACCESO AL SISTEMA BANCARIO ---");
+            System.out.print("Usuario: ");
+            String user = leer.nextLine();
+            System.out.print("Contraseña: ");
+            String pass = leer.nextLine();
+
+            usuarioLogueado = servicio.login(user, pass);
+
+            if (usuarioLogueado == null) {
+                System.out.println("Error: Usuario o contraseña incorrectos.");
+            }
+        }
+        System.out.println("Acceso concedido como: " + usuarioLogueado.getRol());
+
+        System.out.println("Bienvenid@, " + usuarioLogueado.getUsername() + " [" + usuarioLogueado.getRol() + "]");
         do {
             System.out.println("\n1. Abrir Cuenta Nueva");
             System.out.println("2. Ver Cuentas (Listar)");
@@ -36,7 +53,8 @@ public class Main {
             System.out.println("9. Panel de Administración (Auditoría/Reactivar)");
             System.out.println("10. Generar PDF");
             System.out.println("11. Ejecutar Cierre de Mes (Intereses)");
-            System.out.println("12. Salir");
+            System.out.println("12. Disponibilidad y limite de la cuenta");
+            System.out.println("13. Salir");
 
             opcion = leerEntero(leer, "\nElige una opción: ");
 
@@ -49,19 +67,14 @@ public class Main {
                     String numCuenta = leer.nextLine();
                     System.out.print("Nombre del Titular: ");
                     String titular = leer.nextLine();
-
-                    // --- NUEVOS CAMPOS QUE DEBES PEDIR ---
                     System.out.print("Cédula/RIF: ");
                     String cedula = leer.nextLine();
                     System.out.print("Dirección: ");
                     String direccion = leer.nextLine();
                     System.out.print("Teléfono: ");
                     String telefono = leer.nextLine();
-                    // -------------------------------------
 
                     double saldoInicial = leerDouble(leer, "Depósito Inicial: ");
-
-                    // AQUÍ ESTABA EL ERROR: Ahora pasamos los 7 parámetros
                     Cuenta nuevaCuenta = new Cuenta(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
                     servicio.crearCuenta(nuevaCuenta);
                     break;
@@ -87,9 +100,13 @@ public class Main {
                     break;
 
                 case 6:
-                    int idRet = leerEntero(leer, "Ingrese ID para retirar: ");
-                    double montoRet = leerDouble(leer, "Monto: ");
-                    servicio.retirar(idRet, montoRet);
+                    int idRet = leerEntero(leer, "Ingrese ID de cuenta: ");
+                    double montoRet = leerDouble(leer, "Monto a retirar: ");
+
+                    if (servicio.validarReglasDeRetiro(idRet, montoRet)) {
+                        servicio.retirar(idRet, montoRet);
+                        System.out.println("Retiro procesado con éxito.");
+                    }
                     break;
 
                 case 7:
@@ -105,7 +122,6 @@ public class Main {
                     break;
 
                 case 9:
-                    // --- PROTECCIÓN DE ADMIN ---
                     if (!usuarioLogueado.getRol().equals("ADMIN")) {
                         System.out.println("Acceso denegado: Se requieren privilegios de ADMIN.");
                         break;
@@ -136,6 +152,11 @@ public class Main {
                     break;
 
                 case 12:
+                    int idInfo = leerEntero(leer, "Ingrese el ID de su cuenta: ");
+                    servicio.mostrarDetallesDeCuenta(idInfo);
+                    break;
+
+                case 13:
                     System.out.println("¡Gracias por usar JavaBank, " + usuarioLogueado.getUsername() + "!");
                     break;
 
@@ -143,7 +164,7 @@ public class Main {
                     System.out.println("Opción no válida.");
             }
 
-        } while (opcion != 12);
+        } while (opcion != 13);
 
         leer.close();
     }
