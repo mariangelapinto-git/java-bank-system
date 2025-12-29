@@ -1,5 +1,4 @@
 package com.bank;
-
 import service.BankService;
 import java.util.Scanner;
 import model.*;
@@ -54,29 +53,58 @@ public class Main {
             System.out.println("10. Generar PDF");
             System.out.println("11. Ejecutar Cierre de Mes (Intereses)");
             System.out.println("12. Disponibilidad y limite de la cuenta");
-            System.out.println("13. Salir");
+            System.out.println("13. Evaluar prestamos");
+            System.out.println("14. Salir");
 
             opcion = leerEntero(leer, "\nElige una opción: ");
 
             switch (opcion) {
-
                 case 1:
+                    // ABRIR CUENTA NUEVA
                     int id = leerEntero(leer, "Ingrese ID único: ");
+
+                    // CORRECCIÓN AQUÍ: Usamos nextLine() para limpiar el "Enter" del buffer
                     leer.nextLine();
+
                     System.out.print("Número de Cuenta: ");
                     String numCuenta = leer.nextLine();
+
                     System.out.print("Nombre del Titular: ");
                     String titular = leer.nextLine();
+
                     System.out.print("Cédula/RIF: ");
                     String cedula = leer.nextLine();
+
                     System.out.print("Dirección: ");
                     String direccion = leer.nextLine();
+
                     System.out.print("Teléfono: ");
                     String telefono = leer.nextLine();
 
                     double saldoInicial = leerDouble(leer, "Depósito Inicial: ");
-                    Cuenta nuevaCuenta = new Cuenta(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
-                    servicio.crearCuenta(nuevaCuenta);
+
+                    // Otra limpieza de buffer después de leer un número (leerDouble)
+                    leer.nextLine();
+
+                    System.out.println("\nSeleccione Tipo de Cuenta:");
+                    System.out.println("1. Ahorro (Genera Intereses)");
+                    System.out.println("2. Corriente (Permite Sobregiro)");
+                    System.out.println("3. Nómina (Sin Comisiones)");
+                    int tipoC = leerEntero(leer, "Opción: ");
+                    leer.nextLine(); // Limpiar buffer otra vez
+
+                    Cuenta nuevaCuenta = null;
+
+                    if (tipoC == 1) {
+                        nuevaCuenta = new CuentaAhorro(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
+                    } else if (tipoC == 2) {
+                        nuevaCuenta = new CuentaCorriente(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
+                    } else {
+                        nuevaCuenta = new CuentaNomina(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
+                    }
+
+                    if (nuevaCuenta != null) {
+                        servicio.crearCuenta(nuevaCuenta, usuarioLogueado.getId());                    }
                     break;
 
                 case 2:
@@ -110,10 +138,14 @@ public class Main {
                     break;
 
                 case 7:
-                    int idOri = leerEntero(leer, "ID Origen: ");
-                    int idDes = leerEntero(leer, "ID Destino: ");
-                    double montoTrans = leerDouble(leer, "Monto: ");
-                    servicio.transferir(idOri, idDes, montoTrans);
+                    int idOri = leerEntero(leer, "ID de su cuenta (Origen): ");
+                    leer.nextLine(); // Limpiar buffer
+                    System.out.print("Ingrese el Número de Cuenta Destino (20 dígitos): ");
+                    String numCuentaDes = leer.nextLine();
+                    double montoTrans = leerDouble(leer, "Monto a enviar: ");
+
+                    // Usamos el nuevo método que creamos en BankService
+                    servicio.transferir(idOri, numCuentaDes, montoTrans);
                     break;
 
                 case 8:
@@ -157,14 +189,17 @@ public class Main {
                     break;
 
                 case 13:
+                    int idPre = leerEntero(leer, "Ingrese su ID para evaluar préstamo: ");
+                    servicio.evaluarYOfrecerPrestamo(idPre);
+                    break;
+                case 14:
                     System.out.println("¡Gracias por usar JavaBank, " + usuarioLogueado.getUsername() + "!");
                     break;
-
                 default:
                     System.out.println("Opción no válida.");
             }
 
-        } while (opcion != 13);
+        } while (opcion != 14);
 
         leer.close();
     }

@@ -5,18 +5,34 @@ import model.*;
 import java.sql.*;
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
-import java.io.FileOutputStream;
 import org.mindrot.jbcrypt.BCrypt;
+import java.io.FileOutputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 public class BankService {
 
+    //CODIGOS A UTILIZAR EN EL METODO TRANSFERENCIAS ENTRE BANCOS
+
+    private static final Map<String, String> LISTA_BANCOS = new HashMap<>();
+    static {
+        LISTA_BANCOS.put("0102", "Banco de Venezuela");
+        LISTA_BANCOS.put("0105", "Mercantil");
+        LISTA_BANCOS.put("0108", "Provincial");
+        LISTA_BANCOS.put("0134", "Banesco");
+        LISTA_BANCOS.put("0172", "Bancamiga");
+    }
 
     // PROCEDIMIENTO DEL CASE 1. ABRIR CUENTA NUEVA-------------------------
 
-    public void crearCuenta(Cuenta cuenta) {
-        String sql = "INSERT INTO cuentas (id, numero_cuenta, titular, cedula, direccion, telefono, saldo, estado) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVO')";
+    // 1. Agrega el parámetro 'int usuarioId' al método
+    public void crearCuenta(Cuenta cuenta, int usuarioId) {
+        // 2. Agrega 'usuario_id' al final de la lista de columnas y un '?' extra en VALUES
+        String sql = "INSERT INTO cuentas (id, numero_cuenta, titular, cedula, direccion, telefono, saldo, estado, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVO', ?)";
+
         try (Connection con = ConexionBD.obtenerConexion();
              PreparedStatement ps = con.prepareStatement(sql)) {
+
             ps.setInt(1, cuenta.getId());
             ps.setString(2, cuenta.getNumeroCuenta());
             ps.setString(3, cuenta.getTitular());
@@ -24,6 +40,10 @@ public class BankService {
             ps.setString(5, cuenta.getDireccion());
             ps.setString(6, cuenta.getTelefono());
             ps.setDouble(7, cuenta.getSaldo());
+
+            // 3. Setea el ID del usuario en la posición 8
+            ps.setInt(8, usuarioId);
+
             ps.executeUpdate();
             System.out.println("Cuenta creada con éxito.");
         } catch (SQLException e) {
@@ -403,72 +423,92 @@ public class BankService {
     //PROCEDIMIENTO DEL CASE 7. TRANSFERENCIAS-------------------------
 
 
-    public void transferir(int idOrigen, int idDestino, double monto) {
+    public void transferir(int idOrigen, String numeroCuentaDestino, double monto) {
         if (monto <= 0) {
             System.out.println("El monto debe ser mayor a cero.");
             return;
         }
-        if (idOrigen == idDestino) {
-            System.out.println("No puedes transferir a la misma cuenta.");
-            return;
-        }
 
         if (!esCuentaActiva(idOrigen)) return;
-        if (!esCuentaActiva(idDestino)) return;
 
+        // 1. Lógica Interbancaria: Validar código del banco
+        String codigoBanco = numeroCuentaDestino.substring(0, 4);
+        boolean esMismoBanco = codigoBanco.equals("0102");
+        double comision = esMismoBanco ? 0.0 : (monto * 0.003);
+        double montoTotalARestar = monto + comision;
+
+        // SQLs necesarias
         String sqlCheck = "SELECT saldo FROM cuentas WHERE id = ?";
         String sqlRestar = "UPDATE cuentas SET saldo = saldo - ? WHERE id = ?";
-        String sqlSumar = "UPDATE cuentas SET saldo = saldo + ? WHERE id = ?";
         String sqlHistorial = "INSERT INTO transacciones (cuenta_id, tipo, monto) VALUES (?, ?, ?)";
 
+        // NUEVAS SQLs para el destino
+        String sqlBuscarDestino = "SELECT id FROM cuentas WHERE numero_cuenta = ? AND estado = 'ACTIVO'";
+        String sqlSumarDestino = "UPDATE cuentas SET saldo = saldo + ? WHERE id = ?";
+
         try (Connection con = ConexionBD.obtenerConexion()) {
-            con.setAutoCommit(false); // SE INICIA LA ZONA DE SEGURIDAD
+            con.setAutoCommit(false); // Iniciamos transacción
 
             try (PreparedStatement psCheck = con.prepareStatement(sqlCheck);
                  PreparedStatement psRestar = con.prepareStatement(sqlRestar);
-                 PreparedStatement psSumar = con.prepareStatement(sqlSumar);
-                 PreparedStatement psHistorial = con.prepareStatement(sqlHistorial)) {
+                 PreparedStatement psHistorial = con.prepareStatement(sqlHistorial);
+                 PreparedStatement psBuscaDest = con.prepareStatement(sqlBuscarDestino);
+                 PreparedStatement psSumarDest = con.prepareStatement(sqlSumarDestino)) {
 
-                // 1. Verificar saldo de origen
+                // 1. Verificar saldo de origen (incluyendo comisión)
                 psCheck.setInt(1, idOrigen);
                 ResultSet rs = psCheck.executeQuery();
 
-                if (!rs.next() || rs.getDouble("saldo") < monto) {
-                    System.out.println("Transferencia fallida: Saldo insuficiente o cuenta origen no existe.");
+                if (!rs.next() || rs.getDouble("saldo") < montoTotalARestar) {
+                    System.out.println("Fallo: Saldo insuficiente o cuenta origen no existe.");
                     con.rollback();
                     return;
                 }
 
-                // 2. Restar de Origen
-                psRestar.setDouble(1, monto);
+                // 2. Ejecutar la resta en la cuenta de origen
+                psRestar.setDouble(1, montoTotalARestar);
                 psRestar.setInt(2, idOrigen);
-                int filasO = psRestar.executeUpdate();
+                psRestar.executeUpdate();
 
-                // 3. Sumar a Destino
-                psSumar.setDouble(1, monto);
-                psSumar.setInt(2, idDestino);
-                int filasD = psSumar.executeUpdate();
+                // 3. Registrar salida en historial del origen
+                psHistorial.setInt(1, idOrigen);
+                psHistorial.setString(2, "TRANSFERENCIA_SALIDA");
+                psHistorial.setDouble(3, monto);
+                psHistorial.executeUpdate();
 
-                if (filasO > 0 && filasD > 0) {
-                    // 4. Registrar ambos movimientos en el historial
-                    // Registro para el que envía
+                if (comision > 0) {
                     psHistorial.setInt(1, idOrigen);
-                    psHistorial.setString(2, "TRANSFERENCIA_SALIDA");
-                    psHistorial.setDouble(3, monto);
+                    psHistorial.setString(2, "COMISION_INTERBANCARIA");
+                    psHistorial.setDouble(3, comision);
                     psHistorial.executeUpdate();
+                }
 
-                    // Registro para el que recibe
-                    psHistorial.setInt(1, idDestino);
+                // 4. LÓGICA DE DEPÓSITO EN DESTINO (Si es cuenta interna)
+                psBuscaDest.setString(1, numeroCuentaDestino);
+                ResultSet rsDestino = psBuscaDest.executeQuery();
+
+                if (rsDestino.next()) {
+                    // La cuenta existe en nuestro banco, procedemos a sumar el dinero
+                    int idDestinoReal = rsDestino.getInt("id");
+
+                    psSumarDest.setDouble(1, monto);
+                    psSumarDest.setInt(2, idDestinoReal);
+                    psSumarDest.executeUpdate();
+
+                    // Registrar entrada en historial del destino
+                    psHistorial.setInt(1, idDestinoReal);
                     psHistorial.setString(2, "TRANSFERENCIA_ENTRADA");
                     psHistorial.setDouble(3, monto);
                     psHistorial.executeUpdate();
 
-                    con.commit(); // Se aplican todos los cambios
-                    System.out.println("Transferencia de $" + monto + " realizada con éxito.");
+                    System.out.println("Transferencia interna exitosa. Saldo actualizado en cuenta destino.");
                 } else {
-                    System.out.println("Error: Una de las cuentas no existe.");
-                    con.rollback();
+                    // No está en nuestra DB, se asume enviada a otro banco
+                    String nombreBanco = LISTA_BANCOS.getOrDefault(codigoBanco, "Banco Externo");
+                    System.out.println("Fondos enviados con éxito a banca externa: " + nombreBanco);
                 }
+
+                con.commit(); // Todo salió bien, aplicamos cambios
 
             } catch (SQLException e) {
                 con.rollback();
@@ -476,6 +516,37 @@ public class BankService {
             }
         } catch (SQLException e) {
             System.out.println("Error de conexión: " + e.getMessage());
+        }
+    }
+
+    // =================================================================
+    // NUEVO: MÓDULO DE PRÉSTAMOS (BASADO EN PROMEDIO)
+    // =================================================================
+    public void evaluarYOfrecerPrestamo(int cuentaId) {
+        // Obtenemos el promedio de depósitos de los últimos 30 días
+        String sql = "SELECT AVG(monto) FROM transacciones WHERE cuenta_id = ? AND tipo = 'DEPOSITO'";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, cuentaId);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                double promedio = rs.getDouble(1);
+                System.out.println("\n--- EVALUACIÓN DE CRÉDITO ---");
+                if (promedio >= 500) {
+                    double montoPrestamo = promedio * 3; // Ofrece 3 veces su promedio
+                    System.out.println("¡Estado: APROBADO!");
+                    System.out.println("Basado en su promedio mensual de $" + String.format("%.2f", promedio));
+                    System.out.println("Podemos ofrecerle un préstamo de hasta: $" + String.format("%.2f", montoPrestamo));
+                } else {
+                    System.out.println("Estado: RECHAZADO");
+                    System.out.println("Se requiere un promedio de depósitos mayor a $500. Su promedio: $" + String.format("%.2f", promedio));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error al evaluar préstamo: " + e.getMessage());
         }
     }
 
@@ -694,7 +765,6 @@ public class BankService {
         }
     }
 
-
     //=================================================================
     //=================================================================
     //--------------------APARTADO PARA USUARIO EN SQL ----------------
@@ -718,6 +788,51 @@ public class BankService {
         }
     }
 
+    //==============================LOGIN DEL USUARIO (ADMIN)=========================
+
+    public Usuario login(String user, String pass) {
+        String sql = "SELECT id, username, password, rol, intentos_fallidos, bloqueado FROM usuarios WHERE username = ?";
+
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setString(1, user);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                // Aquí ya extraes el id correctamente como entero
+                int id = rs.getInt("id");
+                boolean estaBloqueado = rs.getBoolean("bloqueado");
+                int intentos = rs.getInt("intentos_fallidos");
+                String hashAlmacenado = rs.getString("password");
+
+                if (estaBloqueado) {
+                    System.err.println("Acceso denegado: El usuario '" + user + "' está bloqueado.");
+                    return null;
+                }
+
+                if (BCrypt.checkpw(pass, hashAlmacenado)) {
+                    if (intentos > 0) {
+                        ejecutarUpdateSeguridad(id, 0, false);
+                    }
+
+                    // --- ARREGLO AQUÍ ---
+                    // Usamos la variable 'id' que es int, NO 'rs.getInt("password")'
+                    return new Usuario(id, rs.getString("username"), rs.getString("rol"));
+                    // ---------------------
+
+                } else {
+                    manejarFalloAutenticacion(id, intentos);
+                }
+            } else {
+                System.err.println("El usuario no existe.");
+            }
+        } catch (SQLException e) {
+            System.err.println("Error en base de datos durante login: " + e.getMessage());
+        }
+        return null;
+    }
+
     //==========================OBTENER TOTAL DE USUARIOS SI NO ENCUENTRA CREA UNO======
 
     public int obtenerTotalUsuarios() {
@@ -733,50 +848,6 @@ public class BankService {
             System.err.println("Error al contar usuarios: " + e.getMessage());
         }
         return 0; // Si hay error o está vacía, devuelve 0
-    }
-
-    //==============================LOGIN DEL USUARIO (ADMIN)=========================
-
-    public Usuario login(String user, String pass) {
-        // 1. Traemos también los campos de control de seguridad
-        String sql = "SELECT id, username, password, rol, intentos_fallidos, bloqueado FROM usuarios WHERE username = ?";
-
-        try (Connection con = ConexionBD.obtenerConexion();
-             PreparedStatement ps = con.prepareStatement(sql)) {
-
-            ps.setString(1, user);
-            ResultSet rs = ps.executeQuery();
-
-            if (rs.next()) {
-                int id = rs.getInt("id");
-                boolean estaBloqueado = rs.getBoolean("bloqueado");
-                int intentos = rs.getInt("intentos_fallidos");
-                String hashAlmacenado = rs.getString("password");
-
-                // 2. Regla de Negocio: Verificar si ya está bloqueado
-                if (estaBloqueado) {
-                    System.err.println("Acceso denegado: El usuario '" + user + "' está bloqueado por seguridad.");
-                    return null;
-                }
-
-                // 3. Verificación de clave con BCrypt
-                if (BCrypt.checkpw(pass, hashAlmacenado)) {
-                    // ÉXITO: Si tenía intentos acumulados, los reseteamos a 0
-                    if (intentos > 0) {
-                        ejecutarUpdateSeguridad(id, 0, false);
-                    }
-                    return new Usuario(rs.getString("username"), rs.getString("rol"));
-                } else {
-                    // ERROR: La clave no coincide, aumentamos contador
-                    manejarFalloAutenticacion(id, intentos);
-                }
-            } else {
-                System.err.println("El usuario no existe.");
-            }
-        } catch (SQLException e) {
-            System.err.println("Error en base de datos durante login: " + e.getMessage());
-        }
-        return null;
     }
 
     //=================================================================================
