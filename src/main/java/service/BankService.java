@@ -1,5 +1,8 @@
 package service;
 
+import com.bank.exception.BankException;
+import com.bank.exception.CuentaBloqueadaException;
+import com.bank.exception.SaldoInsuficienteException;
 import com.bank.util.ConexionBD;
 import model.*;
 import java.sql.*;
@@ -269,61 +272,53 @@ public class BankService {
 
     //PROCEDIMIENTO DEL CASE 6 RETIROS-------------------------------
 
-    public void retirar(int cuentaId, double monto) {
-        if (monto <= 0) {
-            System.out.println("El monto a retirar debe ser mayor a cero.");
-            return;
-        }
+    // Cambiamos 'void' por lanzar la excepción
+    public void retirar(int cuentaId, double monto, int usuarioId) throws BankException {
+        if (monto <= 0) throw new BankException("El monto debe ser mayor a cero.");
+        if (!esCuentaActiva(cuentaId)) throw new CuentaBloqueadaException("La cuenta no está activa.");
 
-        if (!esCuentaActiva(cuentaId)) {
-            return;
-        }
-        // Consultar el saldo actual
         String sqlCheck = "SELECT saldo FROM cuentas WHERE id = ?";
         String sqlUpdate = "UPDATE cuentas SET saldo = saldo - ? WHERE id = ?";
         String sqlInsert = "INSERT INTO transacciones (cuenta_id, tipo, monto) VALUES (?, 'RETIRO', ?)";
 
         try (Connection con = ConexionBD.obtenerConexion()) {
-            con.setAutoCommit(false); // Inicia transacción manual
-
-            try (PreparedStatement psCheck = con.prepareStatement(sqlCheck);
-                 PreparedStatement psUpdate = con.prepareStatement(sqlUpdate);
-                 PreparedStatement psInsert = con.prepareStatement(sqlInsert)) {
-
-                // 1. Verificar si hay SALDO SUFICIENTE
+            con.setAutoCommit(false);
+            try (PreparedStatement psCheck = con.prepareStatement(sqlCheck)) {
                 psCheck.setInt(1, cuentaId);
                 ResultSet rs = psCheck.executeQuery();
 
                 if (rs.next()) {
                     double saldoActual = rs.getDouble("saldo");
+                    if (saldoActual < monto) {
+                        // 1. PRIMERO REGISTRAMOS EL FALLO
+                        registrarAuditoria(usuarioId, "INTENTO_RETIRO_FALLIDO", "Saldo: " + saldoActual + " Intentó: " + monto);
 
-                    if (saldoActual >= monto) {
-                        // 2. Realizar el DESCUENTO
+                        // 2. LUEGO LANZAMOS LA EXCEPCIÓN (Esto detiene el método y va al catch del Main)
+                        throw new SaldoInsuficienteException("Saldo insuficiente. Disponible: $" + saldoActual);
+                    }
+
+                    // Si hay saldo, procedemos
+                    try (PreparedStatement psUpdate = con.prepareStatement(sqlUpdate);
+                         PreparedStatement psInsert = con.prepareStatement(sqlInsert)) {
                         psUpdate.setDouble(1, monto);
                         psUpdate.setInt(2, cuentaId);
                         psUpdate.executeUpdate();
 
-                        // 3. Registrar en el HISTORIAL
                         psInsert.setInt(1, cuentaId);
                         psInsert.setDouble(2, monto);
                         psInsert.executeUpdate();
 
-                        con.commit(); // Se aplican los cambios si esta todo perfecto
-                        System.out.println("¡Retiro exitoso! Has retirado: $" + monto);
-                    } else {
-                        System.out.println("Error: Saldo insuficiente. Saldo disponible: $" + saldoActual);
-                        con.rollback();
+                        con.commit();
+                        // REGISTRO EXITOSO EN AUDITORÍA
+                        registrarAuditoria(usuarioId, "RETIRO_EXITOSO", "Monto: " + monto + " Cuenta ID: " + cuentaId);
                     }
-                } else {
-                    System.out.println("Error: No se encontró la cuenta con ID " + cuentaId);
                 }
-
             } catch (SQLException e) {
                 con.rollback();
-                System.out.println("Error en el retiro: " + e.getMessage());
+                throw new BankException("Error en base de datos: " + e.getMessage());
             }
         } catch (SQLException e) {
-            System.out.println("Error de conexión: " + e.getMessage());
+            throw new BankException("Error de conexión.");
         }
     }
 
@@ -331,7 +326,7 @@ public class BankService {
     //============================METODO COMPLEMENTO==========================
     //========================================================================
 
-    public boolean validarReglasDeRetiro(int cuentaId, double montoARetirar) {
+    public void validarReglasDeRetiro(int cuentaId, double montoARetirar, int usuarioId) throws BankException {
         String sql = "SELECT saldo, saldo_minimo, limite_diario FROM cuentas WHERE id = ?";
 
         try (Connection con = ConexionBD.obtenerConexion();
@@ -345,33 +340,24 @@ public class BankService {
                 double saldoMinimo = rs.getDouble("saldo_minimo");
                 double limiteDiario = rs.getDouble("limite_diario");
 
-                if (limiteDiario <= 0) {
-                    System.err.println("Error: Esta cuenta no tiene asignado un límite de retiro diario.");
-                    return false;
-                }
-
                 // REGLA 1: Saldo Mínimo Obligatorio
                 if ((saldoActual - montoARetirar) < saldoMinimo) {
-                    System.err.println("Operación rechazada: El saldo debe quedar al menos en $" + saldoMinimo);
-                    return false;
+                    registrarAuditoria(usuarioId, "RETIRO_RECHAZADO", "Violación de saldo mínimo. Intento: " + montoARetirar);
+                    throw new BankException("Operación rechazada: El saldo debe quedar al menos en $" + saldoMinimo);
                 }
 
                 // REGLA 2: Límite Diario
                 double yaRetiradoHoy = obtenerSumaRetirosHoy(cuentaId);
-
                 if ((yaRetiradoHoy + montoARetirar) > limiteDiario) {
-                    double disponible = limiteDiario - yaRetiradoHoy;
-                    System.err.println("Operación rechazada: Límite diario de $" + limiteDiario + " excedido.");
-                    System.err.println("Usted ya retiró $" + yaRetiradoHoy + " hoy. Disponible restante: $" + Math.max(0, disponible));
-                    return false;
+                    registrarAuditoria(usuarioId, "RETIRO_RECHAZADO", "Límite diario excedido. Intento: " + montoARetirar);
+                    throw new BankException("Operación rechazada: Límite diario de $" + limiteDiario + " excedido.");
                 }
-
-                return true;
+            } else {
+                throw new BankException("La cuenta no existe.");
             }
         } catch (SQLException e) {
-            System.err.println("Error validando reglas de negocio: " + e.getMessage());
+            throw new BankException("Error validando reglas: " + e.getMessage());
         }
-        return false;
     }
 
 
@@ -423,31 +409,24 @@ public class BankService {
     //PROCEDIMIENTO DEL CASE 7. TRANSFERENCIAS-------------------------
 
 
-    public void transferir(int idOrigen, String numeroCuentaDestino, double monto) {
-        if (monto <= 0) {
-            System.out.println("El monto debe ser mayor a cero.");
-            return;
-        }
+    public void transferir(int idOrigen, String numeroCuentaDestino, double monto, int usuarioId) throws BankException {
+        if (monto <= 0) throw new BankException("El monto debe ser mayor a cero.");
+        if (!esCuentaActiva(idOrigen)) throw new CuentaBloqueadaException("La cuenta origen no está activa.");
 
-        if (!esCuentaActiva(idOrigen)) return;
-
-        // 1. Lógica Interbancaria: Validar código del banco
+        // 1. Lógica Interbancaria
         String codigoBanco = numeroCuentaDestino.substring(0, 4);
         boolean esMismoBanco = codigoBanco.equals("0102");
         double comision = esMismoBanco ? 0.0 : (monto * 0.003);
         double montoTotalARestar = monto + comision;
 
-        // SQLs necesarias
         String sqlCheck = "SELECT saldo FROM cuentas WHERE id = ?";
         String sqlRestar = "UPDATE cuentas SET saldo = saldo - ? WHERE id = ?";
         String sqlHistorial = "INSERT INTO transacciones (cuenta_id, tipo, monto) VALUES (?, ?, ?)";
-
-        // NUEVAS SQLs para el destino
         String sqlBuscarDestino = "SELECT id FROM cuentas WHERE numero_cuenta = ? AND estado = 'ACTIVO'";
         String sqlSumarDestino = "UPDATE cuentas SET saldo = saldo + ? WHERE id = ?";
 
         try (Connection con = ConexionBD.obtenerConexion()) {
-            con.setAutoCommit(false); // Iniciamos transacción
+            con.setAutoCommit(false);
 
             try (PreparedStatement psCheck = con.prepareStatement(sqlCheck);
                  PreparedStatement psRestar = con.prepareStatement(sqlRestar);
@@ -455,22 +434,21 @@ public class BankService {
                  PreparedStatement psBuscaDest = con.prepareStatement(sqlBuscarDestino);
                  PreparedStatement psSumarDest = con.prepareStatement(sqlSumarDestino)) {
 
-                // 1. Verificar saldo de origen (incluyendo comisión)
+                // 2. Verificar saldo origen
                 psCheck.setInt(1, idOrigen);
                 ResultSet rs = psCheck.executeQuery();
-
                 if (!rs.next() || rs.getDouble("saldo") < montoTotalARestar) {
-                    System.out.println("Fallo: Saldo insuficiente o cuenta origen no existe.");
+                    registrarAuditoria(usuarioId, "TRANSFERENCIA_FALLIDA", "Saldo insuficiente para monto: " + monto + " + comision: " + comision);
                     con.rollback();
-                    return;
+                    throw new SaldoInsuficienteException("Saldo insuficiente (incluyendo comisión interbancaria).");
                 }
 
-                // 2. Ejecutar la resta en la cuenta de origen
+                // 3. Ejecutar resta en origen
                 psRestar.setDouble(1, montoTotalARestar);
                 psRestar.setInt(2, idOrigen);
                 psRestar.executeUpdate();
 
-                // 3. Registrar salida en historial del origen
+                // 4. Registrar historial origen
                 psHistorial.setInt(1, idOrigen);
                 psHistorial.setString(2, "TRANSFERENCIA_SALIDA");
                 psHistorial.setDouble(3, monto);
@@ -483,39 +461,35 @@ public class BankService {
                     psHistorial.executeUpdate();
                 }
 
-                // 4. LÓGICA DE DEPÓSITO EN DESTINO (Si es cuenta interna)
+                // 5. Lógica de destino
                 psBuscaDest.setString(1, numeroCuentaDestino);
                 ResultSet rsDestino = psBuscaDest.executeQuery();
 
                 if (rsDestino.next()) {
-                    // La cuenta existe en nuestro banco, procedemos a sumar el dinero
                     int idDestinoReal = rsDestino.getInt("id");
-
                     psSumarDest.setDouble(1, monto);
                     psSumarDest.setInt(2, idDestinoReal);
                     psSumarDest.executeUpdate();
 
-                    // Registrar entrada en historial del destino
                     psHistorial.setInt(1, idDestinoReal);
                     psHistorial.setString(2, "TRANSFERENCIA_ENTRADA");
                     psHistorial.setDouble(3, monto);
                     psHistorial.executeUpdate();
 
-                    System.out.println("Transferencia interna exitosa. Saldo actualizado en cuenta destino.");
+                    registrarAuditoria(usuarioId, "TRANSFERENCIA_INTERNA", "De ID:" + idOrigen + " a Cta:" + numeroCuentaDestino);
                 } else {
-                    // No está en nuestra DB, se asume enviada a otro banco
                     String nombreBanco = LISTA_BANCOS.getOrDefault(codigoBanco, "Banco Externo");
-                    System.out.println("Fondos enviados con éxito a banca externa: " + nombreBanco);
+                    registrarAuditoria(usuarioId, "TRANSFERENCIA_EXTERNA", "Hacia " + nombreBanco + " Cta:" + numeroCuentaDestino);
                 }
 
-                con.commit(); // Todo salió bien, aplicamos cambios
+                con.commit();
 
             } catch (SQLException e) {
                 con.rollback();
-                System.out.println("Error crítico en la transferencia: " + e.getMessage());
+                throw new BankException("Error crítico en la transacción: " + e.getMessage());
             }
         } catch (SQLException e) {
-            System.out.println("Error de conexión: " + e.getMessage());
+            throw new BankException("Error de conexión con la base de datos.");
         }
     }
 
@@ -880,6 +854,22 @@ public class BankService {
             ps.setBoolean(2, bloquear);
             ps.setInt(3, userId);
             ps.executeUpdate();
+        }
+    }
+
+    //===================EXCEPCTIONS===========================
+    //=========================================================
+
+    private void registrarAuditoria(int usuarioId, String accion, String detalles) {
+        String sql = "INSERT INTO logs_sistema (usuario_id, accion, detalles, fecha_hora) VALUES (?, ?, ?, NOW())";
+        try (Connection con = ConexionBD.obtenerConexion();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, usuarioId);
+            ps.setString(2, accion);
+            ps.setString(3, detalles);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Error crítico guardando auditoría: " + e.getMessage());
         }
     }
 

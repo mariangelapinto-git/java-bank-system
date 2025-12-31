@@ -1,4 +1,5 @@
 package com.bank;
+import com.bank.exception.BankException;
 import service.BankService;
 import java.util.Scanner;
 import model.*;
@@ -8,6 +9,7 @@ public class Main {
 
         BankService servicio = new BankService();
         Scanner leer = new Scanner(System.in);
+        int usuarioLogueadoId = 3;
         int opcion = 0;
 
         System.out.println("--- BIENVENIDO AL SISTEMA BANCARIO ---");
@@ -127,25 +129,41 @@ public class Main {
                     servicio.depositar(idDep, montoDep);
                     break;
 
-                case 6:
+                case 6: // RETIROS
                     int idRet = leerEntero(leer, "Ingrese ID de cuenta: ");
                     double montoRet = leerDouble(leer, "Monto a retirar: ");
 
-                    if (servicio.validarReglasDeRetiro(idRet, montoRet)) {
-                        servicio.retirar(idRet, montoRet);
-                        System.out.println("Retiro procesado con éxito.");
+                    try {
+                        // 1. Validamos reglas: Si algo está mal, lanzará una BankException y saltará al catch
+                        // IMPORTANTE: Asegúrate de pasar los 3 parámetros que definimos antes
+                        servicio.validarReglasDeRetiro(idRet, montoRet, usuarioLogueadoId);
+
+                        // 2. Si llegó aquí es porque las reglas pasaron, ahora procedemos al retiro
+                        servicio.retirar(idRet, montoRet, usuarioLogueadoId);
+
+                        System.out.println("¡Retiro procesado con éxito!");
+
+                    } catch (BankException e) {
+                        // 3. Aquí se mostrarán todos los errores (Saldo mínimo, límite diario, saldo insuficiente)
+                        System.err.println("ALERTA: " + e.getMessage());
                     }
                     break;
 
-                case 7:
+                case 7: // TRANSFERENCIAS
                     int idOri = leerEntero(leer, "ID de su cuenta (Origen): ");
                     leer.nextLine(); // Limpiar buffer
                     System.out.print("Ingrese el Número de Cuenta Destino (20 dígitos): ");
                     String numCuentaDes = leer.nextLine();
                     double montoTrans = leerDouble(leer, "Monto a enviar: ");
 
-                    // Usamos el nuevo método que creamos en BankService
-                    servicio.transferir(idOri, numCuentaDes, montoTrans);
+                    try {
+                        // 4. Llamamos al método con el ID del usuario logueado
+                        servicio.transferir(idOri, numCuentaDes, montoTrans, usuarioLogueadoId);
+                        System.out.println("Transferencia realizada con éxito.");
+                    } catch (BankException e) {
+                        // 5. Capturamos el error y el usuario verá el motivo exacto
+                        System.err.println("ERROR EN TRANSFERENCIA: " + e.getMessage());
+                    }
                     break;
 
                 case 8:
