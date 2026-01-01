@@ -57,7 +57,7 @@ public class VentanaLogin extends JFrame {
         btnLogin.setForeground(Color.WHITE);
         btnLogin.setFocusPainted(false);
 
-        // --- EL CABLEADO: Conecta el botón con el método ejecutarLogin ---
+        // --- Conecta el botón con el método ejecutarLogin ---
         btnLogin.addActionListener(e -> ejecutarLogin());
 
         panelPrincipal.add(btnLogin, gbc);
@@ -104,7 +104,7 @@ public class VentanaLogin extends JFrame {
         return 0;
     }
 
-    // --- NUEVO MÉTODO: Para abrir la ventana principal ---
+    // --- NUEVO MÉTODO: Para abrir la ventana principal (INTERFAZ GRAFICA) ---
     private void abrirDashboard(int idUsuario) {
         VentanaDashboard dashboard = new VentanaDashboard(idUsuario);
         dashboard.setVisible(true);
