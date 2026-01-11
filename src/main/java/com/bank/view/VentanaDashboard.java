@@ -5,6 +5,7 @@ import com.bank.model.*;
 import com.bank.service.BankService;
 import com.bank.service.ReporteService;
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.List;
@@ -14,62 +15,115 @@ public class VentanaDashboard extends JFrame {
     private final BankService bankService;
     private final ReporteService reporteService;
     private final Usuario usuarioLogueado;
+    private JPanel panelContenido;
 
     public VentanaDashboard(BankService bankService, ReporteService reporteService, Usuario usuario) {
         this.bankService = bankService;
         this.reporteService = reporteService;
         this.usuarioLogueado = usuario;
 
-        setTitle("JavaBank - Panel de Control: " + usuario.getUsername());
-        setSize(900, 600);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLocationRelativeTo(null);
-        setLayout(new BorderLayout());
+        configurarVentana();
 
-        // --- Panel Lateral ---
-        JPanel panelMenu = new JPanel(new GridLayout(0, 1, 5, 5));
-        panelMenu.setBackground(new Color(44, 62, 80));
-        panelMenu.setPreferredSize(new Dimension(250, 600));
+        // --- SIDEBAR (Menú Lateral) ---
+        JPanel panelMenu = new JPanel();
+        panelMenu.setLayout(new BoxLayout(panelMenu, BoxLayout.Y_AXIS));
+        panelMenu.setBackground(new Color(28, 40, 51));
+        panelMenu.setPreferredSize(new Dimension(280, 750));
+        panelMenu.setBorder(new EmptyBorder(20, 15, 20, 15));
 
-        panelMenu.add(new JLabel("<html><font color='white' size='5'><b>&nbsp;OPERACIONES</b>", SwingConstants.LEFT));
+        JLabel lblTitulo = new JLabel("JAVA BANK PRO");
+        lblTitulo.setForeground(Color.WHITE);
+        lblTitulo.setFont(new Font("Segoe UI", Font.BOLD, 22));
+        lblTitulo.setAlignmentX(Component.CENTER_ALIGNMENT);
+        lblTitulo.setBorder(new EmptyBorder(0, 0, 25, 0));
+        panelMenu.add(lblTitulo);
 
-        agregarBoton(panelMenu, "Abrir Cuenta Nueva", e -> ejecutarNuevaCuenta());
-        agregarBoton(panelMenu, "Ver Mis Cuentas", e -> mostrarListadoCuentas());
-        agregarBoton(panelMenu, "Depósito de Dinero", e -> ejecutarDeposito());
-        agregarBoton(panelMenu, "Retirar Efectivo", e -> ejecutarRetiro());
-        agregarBoton(panelMenu, "Generar Reporte PDF", e -> ejecutarReportePDF());
-        agregarBoton(panelMenu, "Evaluar Préstamos", e -> evaluarPrestamos());
+        // --- GRUPO 1: GESTIÓN DE CUENTAS ---
+        agregarBotonMenu(panelMenu, "  Abrir Cuenta", e -> ejecutarNuevaCuenta());
+        agregarBotonMenu(panelMenu, "  Listar Cuentas", e -> mostrarListadoCuentas());
+        agregarBotonMenu(panelMenu, "  Cerrar Cuenta", e -> ejecutarCerrarCuenta());
+        panelMenu.add(Box.createVerticalStrut(15));
 
-        if ("ADMIN".equals(usuario.getRol())) {
-            JButton btnAdmin = agregarBoton(panelMenu, "Panel Admin (Logs)", e -> mostrarPanelAdmin());
-            btnAdmin.setBackground(new Color(39, 174, 96));
-            JButton btnCierre = agregarBoton(panelMenu, "Cierre de Mes", e -> ejecutarCierreMes());
-            btnCierre.setBackground(new Color(39, 174, 96));
-        }
+        // --- GRUPO 2: TRANSACCIONES ---
+        agregarBotonMenu(panelMenu, "  Ver Saldo", e -> consultarSaldo());
+        agregarBotonMenu(panelMenu, "  Depósito", e -> ejecutarDeposito());
+        agregarBotonMenu(panelMenu, "  Retiro", e -> ejecutarRetiro());
+        agregarBotonMenu(panelMenu, "  Transferir", e -> ejecutarTransferencia());
+        panelMenu.add(Box.createVerticalStrut(15));
 
-        JButton btnSalir = agregarBoton(panelMenu, "Cerrar Sesión", e -> {
-            this.dispose();
-        });
+        // --- GRUPO 3: SERVICIOS AVANZADOS ---
+        agregarBotonMenu(panelMenu, "  Generar PDF", e -> ejecutarReportePDF());
+        agregarBotonMenu(panelMenu, "️  Cierre Mes", e -> ejecutarCierreMes());
+        agregarBotonMenu(panelMenu, "  Préstamos", e -> evaluarPrestamos());
+
+        panelMenu.add(Box.createVerticalGlue());
+
+        // --- SALIR ---
+        JButton btnSalir = agregarBotonMenu(panelMenu, "   Salir", e -> this.dispose());
         btnSalir.setBackground(new Color(192, 57, 43));
 
         add(panelMenu, BorderLayout.WEST);
 
-        JPanel panelInicio = new JPanel(new GridBagLayout());
-        JLabel lblUser = new JLabel("Bienvenid@, " + usuario.getUsername() + " [" + usuario.getRol() + "]");
-        lblUser.setFont(new Font("Arial", Font.BOLD, 16));
-        panelInicio.add(lblUser);
-        add(panelInicio, BorderLayout.CENTER);
+        // --- PANEL CENTRAL ---
+        panelContenido = new JPanel(new BorderLayout());
+        panelContenido.setBackground(new Color(244, 246, 247));
+        mostrarPantallaBienvenida();
+        add(panelContenido, BorderLayout.CENTER);
     }
 
-    private JButton agregarBoton(JPanel panel, String texto, java.awt.event.ActionListener accion) {
+    private void configurarVentana() {
+        setTitle("JavaBank Pro - Panel de Control");
+        setSize(1200, 800);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLocationRelativeTo(null);
+    }
+
+    private void mostrarPantallaBienvenida() {
+        panelContenido.removeAll();
+        JLabel lbl = new JLabel("Bienvenid@, " + usuarioLogueado.getUsername(), SwingConstants.CENTER);
+        lbl.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        lbl.setForeground(new Color(52, 73, 94));
+        panelContenido.add(lbl, BorderLayout.CENTER);
+        panelContenido.revalidate();
+        panelContenido.repaint();
+    }
+
+    private JButton agregarBotonMenu(JPanel panel, String texto, java.awt.event.ActionListener accion) {
         JButton btn = new JButton(texto);
+        btn.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        btn.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 14));
         btn.setForeground(Color.WHITE);
-        btn.setBackground(new Color(52, 73, 94));
+        btn.setBackground(new Color(44, 62, 80));
         btn.setFocusPainted(false);
-        btn.setFont(new Font("Arial", Font.BOLD, 12));
+        btn.setBorder(new EmptyBorder(10, 10, 10, 10));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
         btn.addActionListener(accion);
         panel.add(btn);
+        panel.add(Box.createVerticalStrut(8));
         return btn;
+    }
+
+    // --- MÉTODOS DE LÓGICA ---
+
+    private void consultarSaldo() {
+        try {
+            String idStr = JOptionPane.showInputDialog(this, "ID de cuenta para ver saldo:");
+            if (idStr != null) {
+                double saldo = bankService.obtenerSaldo(Long.parseLong(idStr));
+                JOptionPane.showMessageDialog(this, "Saldo Actual: $" + String.format("%.2f", saldo));
+            }
+        } catch (Exception e) { JOptionPane.showMessageDialog(this, "Error: " + e.getMessage()); }
+    }
+
+    private void ejecutarCerrarCuenta() {
+        try {
+            String idStr = JOptionPane.showInputDialog(this, "ID de cuenta a CERRAR:");
+            if (idStr != null) {
+                bankService.cambiarEstadoCuenta(Long.parseLong(idStr), "CERRADA");
+                JOptionPane.showMessageDialog(this, "Cuenta cerrada con éxito.");
+            }
+        } catch (Exception e) { JOptionPane.showMessageDialog(this, "Error: " + e.getMessage()); }
     }
 
     private void ejecutarNuevaCuenta() {
@@ -82,29 +136,18 @@ public class VentanaDashboard extends JFrame {
             String inputMonto = JOptionPane.showInputDialog(this, "Monto de apertura ($10.0 min):");
             if (inputMonto == null) return;
             double montoInicial = Double.parseDouble(inputMonto);
-
             String numCuenta = "CTA-" + (int)(Math.random() * 900000 + 100000);
 
             Cuenta nueva;
-            // 1. Usamos Polimorfismo e Herencia según tus notas [cite: 2025-12-27]
-            if (tipo.equals("Ahorros")) {
-                nueva = new CuentaAhorro(numCuenta, usuarioLogueado.getUsername(), "N/A", "N/A", "N/A", montoInicial);
-            } else if (tipo.equals("Corriente")) {
-                nueva = new CuentaCorriente(numCuenta, usuarioLogueado.getUsername(), "N/A", "N/A", "N/A", montoInicial);
-            } else {
-                nueva = new CuentaNomina(numCuenta, usuarioLogueado.getUsername(), "N/A", "N/A", "N/A", montoInicial);
-            }
+            if (tipo.equals("Ahorros")) nueva = new CuentaAhorro(numCuenta, usuarioLogueado.getUsername(), "N/A", "N/A", "N/A", montoInicial);
+            else if (tipo.equals("Corriente")) nueva = new CuentaCorriente(numCuenta, usuarioLogueado.getUsername(), "N/A", "N/A", "N/A", montoInicial);
+            else nueva = new CuentaNomina(numCuenta, usuarioLogueado.getUsername(), "N/A", "N/A", "N/A", montoInicial);
 
             nueva.setUsuario(usuarioLogueado);
-
             bankService.crearCuenta(nueva, usuarioLogueado.getId());
-
-            JOptionPane.showMessageDialog(this, "¡Éxito! Cuenta " + tipo + " abierta y vinculada a su usuario.");
-
-        } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this, "Error: Ingrese un monto numérico válido.");
+            JOptionPane.showMessageDialog(this, "¡Éxito! Cuenta " + tipo + " abierta.");
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error al crear cuenta: " + e.getMessage());
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
         }
     }
 
@@ -113,13 +156,7 @@ public class VentanaDashboard extends JFrame {
         DefaultTableModel modelo = new DefaultTableModel(columnas, 0);
         List<Cuenta> cuentas = bankService.obtenerTodasLasCuentas();
         for (Cuenta c : cuentas) {
-            Object[] fila = {
-                    c.getId(),
-                    c.getNumeroCuenta(),
-                    c.getClass().getSimpleName().replace("Cuenta", ""),
-                    String.format("$%.2f", c.getSaldo()),
-                    c.getEstado()
-            };
+            Object[] fila = {c.getId(), c.getNumeroCuenta(), c.getClass().getSimpleName().replace("Cuenta", ""), String.format("$%.2f", c.getSaldo()), c.getEstado()};
             modelo.addRow(fila);
         }
         JTable tabla = new JTable(modelo);
@@ -130,78 +167,50 @@ public class VentanaDashboard extends JFrame {
         try {
             String idInput = JOptionPane.showInputDialog("ID de la cuenta:");
             if (idInput == null) return;
-            Long id = Long.parseLong(idInput);
-
-            String montoInput = JOptionPane.showInputDialog("Monto a depositar:");
-            if (montoInput == null) return;
-            double monto = Double.parseDouble(montoInput);
-
-            bankService.depositar(id, monto);
+            bankService.depositar(Long.parseLong(idInput), Double.parseDouble(JOptionPane.showInputDialog("Monto:")));
             JOptionPane.showMessageDialog(this, "Depósito exitoso.");
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
-        }
+        } catch (Exception e) { JOptionPane.showMessageDialog(this, "Error: " + e.getMessage()); }
     }
 
     private void ejecutarRetiro() {
         try {
             String idInput = JOptionPane.showInputDialog(this, "ID de la cuenta:");
             if (idInput == null) return;
-            Long idCuenta = Long.parseLong(idInput);
-
-            String montoInput = JOptionPane.showInputDialog(this, "Monto a retirar:");
-            if (montoInput == null) return;
-            double monto = Double.parseDouble(montoInput);
-
-            bankService.retirar(idCuenta, monto, usuarioLogueado.getId());
-            JOptionPane.showMessageDialog(this, "Retiro procesado exitosamente.");
-        } catch (BankException e) {
-            JOptionPane.showMessageDialog(this, e.getMessage(), "Alerta de Banco", JOptionPane.WARNING_MESSAGE);
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Entrada inválida.");
-        }
+            bankService.retirar(Long.parseLong(idInput), Double.parseDouble(JOptionPane.showInputDialog("Monto:")), usuarioLogueado.getId());
+            JOptionPane.showMessageDialog(this, "Retiro exitoso.");
+        } catch (Exception e) { JOptionPane.showMessageDialog(this, "Error: " + e.getMessage()); }
     }
 
-    private void mostrarPanelAdmin() {
-        List<String> logs = bankService.obtenerLogsRecientes();
-        StringBuilder sb = new StringBuilder("--- ÚLTIMOS MOVIMIENTOS ---\n\n");
-        logs.forEach(log -> sb.append(log).append("\n"));
+    private void ejecutarTransferencia() {
+        try {
+            String idOrigenStr = JOptionPane.showInputDialog(this, "ID de Cuenta Origen:");
+            if (idOrigenStr == null) return;
 
-        JTextArea areaTexto = new JTextArea(sb.toString(), 15, 60);
-        areaTexto.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        areaTexto.setEditable(false);
+            String numCuentaDestino = JOptionPane.showInputDialog(this, "Número de Cuenta Destino (String):");
+            if (numCuentaDestino == null) return;
 
-        Object[] opciones = {"Reactivar Cuenta", "Cerrar"};
-        int seleccion = JOptionPane.showOptionDialog(this, new JScrollPane(areaTexto), "Panel de Auditoría", JOptionPane.YES_NO_OPTION, JOptionPane.INFORMATION_MESSAGE, null, opciones, opciones[1]);
+            String montoStr = JOptionPane.showInputDialog(this, "Monto a transferir:");
+            if (montoStr == null) return;
 
-        if (seleccion == JOptionPane.YES_OPTION) {
-            try {
-                String idInput = JOptionPane.showInputDialog(this, "ID de cuenta a REACTIVAR:");
-                if (idInput != null) {
-                    Long id = Long.parseLong(idInput);
-                    bankService.cambiarEstadoCuenta(id, "ACTIVO");
-                    JOptionPane.showMessageDialog(this, "Cuenta reactivada.");
-                }
-            } catch (Exception e) {
-                JOptionPane.showMessageDialog(this, "Error: ID inválido.");
-            }
+            bankService.transferir(Long.parseLong(idOrigenStr), numCuentaDestino, Double.parseDouble(montoStr), usuarioLogueado.getId());
+            JOptionPane.showMessageDialog(this, "✅ Transferencia procesada exitosamente.");
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Error en transferencia: " + e.getMessage());
         }
     }
 
     private void ejecutarReportePDF() {
         try {
-            String idStr = JOptionPane.showInputDialog(this, "Ingrese ID de cuenta:");
+            String idStr = JOptionPane.showInputDialog(this, "ID de cuenta para reporte:");
             if (idStr != null) {
                 reporteService.generarEstadoCuenta(Long.parseLong(idStr));
-                JOptionPane.showMessageDialog(this, "PDF generado.");
+                JOptionPane.showMessageDialog(this, "PDF generado con éxito.");
             }
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error PDF: " + e.getMessage());
-        }
+        } catch (Exception e) { JOptionPane.showMessageDialog(this, "Error PDF: " + e.getMessage()); }
     }
 
     private void ejecutarCierreMes() {
-        if (JOptionPane.showConfirmDialog(this, "¿Ejecutar cierre de mes?", "Confirmar", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+        if (JOptionPane.showConfirmDialog(this, "¿Ejecutar intereses?") == JOptionPane.YES_OPTION) {
             bankService.ejecutarInteresesBatch();
             JOptionPane.showMessageDialog(this, "Proceso completado.");
         }
@@ -209,13 +218,11 @@ public class VentanaDashboard extends JFrame {
 
     private void evaluarPrestamos() {
         try {
-            String idStr = JOptionPane.showInputDialog(this, "ID de cuenta para análisis:");
+            String idStr = JOptionPane.showInputDialog("ID para análisis de préstamo:");
             if (idStr != null) {
                 String resultado = bankService.evaluarPrestamo(Long.parseLong(idStr));
-                JOptionPane.showMessageDialog(this, resultado, "Análisis Crediticio", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(this, resultado);
             }
-        } catch (Exception e) {
-            JOptionPane.showMessageDialog(this, "Error evaluación: " + e.getMessage());
-        }
+        } catch (Exception e) { JOptionPane.showMessageDialog(this, "Error: " + e.getMessage()); }
     }
 }

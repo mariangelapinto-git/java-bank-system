@@ -159,6 +159,69 @@ public class BankService {
         return cuentaRepository.findById(idCons);
     }
 
-    public void transferir(Long idOri, String cuentaDest, double montoTrans, Long id) {
+    // 6. TRANSFERENCIA ATÓMICA (Implementación corregida)
+    @Transactional
+    public void transferir(Long idOri, String numCuentaDestino, double montoTrans, Long usuarioAutorizaId) {
+        if (montoTrans <= 0) throw new BankException("El monto debe ser positivo.");
+
+        // Origen
+        Cuenta origen = cuentaRepository.findById(idOri)
+                .orElseThrow(() -> new BankException("Cuenta origen no encontrada."));
+
+        // Destino (Buscamos por número de cuenta String como pide tu Dashboard)
+        Cuenta destino = cuentaRepository.findByNumeroCuenta(numCuentaDestino)
+                .orElseThrow(() -> new BankException("La cuenta destino " + numCuentaDestino + " no existe."));
+
+        if (origen.getId().equals(destino.getId())) {
+            throw new BankException("No se puede transferir a la misma cuenta.");
+        }
+
+        validarEstadoHabilitado(origen);
+        validarEstadoHabilitado(destino);
+
+        // Validación de saldo
+        if (origen.getSaldo() < montoTrans) {
+            throw new SaldoInsuficienteException("Saldo insuficiente para transferir.");
+        }
+
+        // Ejecución
+        origen.setSaldo(origen.getSaldo() - montoTrans);
+        destino.setSaldo(destino.getSaldo() + montoTrans);
+
+        cuentaRepository.save(origen);
+        cuentaRepository.save(destino);
+
+        // Registro de transacciones para ambos
+        registrarTransaccion(origen, "TRANSFERENCIA_SALIDA", montoTrans);
+        registrarTransaccion(destino, "TRANSFERENCIA_ENTRADA", montoTrans);
+
+        // Auditoría detallada [cite: 2025-12-27]
+        registrarLog(usuarioAutorizaId, "TRANSFERENCIA",
+                String.format("Transferencia de $%s desde ID:%s hacia %s", montoTrans, idOri, numCuentaDestino));
+    }
+
+    // 7. REGISTRO DE SEGURIDAD (Para VentanaLogin)
+    @Transactional
+    public void registrarLogSeguridad(String username, String accion, String detalles) {
+        // Buscamos si el usuario existe para vincular el log, si no, lo guardamos como anónimo
+        Usuario user = usuarioRepository.findByUsername(username).orElse(null);
+
+        LogSistema log = new LogSistema();
+        log.setUsuario(user);
+        log.setAccion(accion);
+        log.setDetalles("Usuario [" + username + "]: " + detalles);
+        log.setFechaHora(LocalDateTime.now());
+
+        logRepository.save(log);
+
+        // Si es un fallo de seguridad, lo imprimimos en consola del servidor (simulación de alerta)
+        System.err.println("!!! SECURITY ALERT: " + accion + " - " + detalles);
+    }
+
+    // Método extra para obtener saldo rápido
+    public double obtenerSaldo(Long cuentaId) {
+        return cuentaRepository.findById(cuentaId)
+                .map(Cuenta::getSaldo)
+                .orElseThrow(() -> new BankException("Cuenta no encontrada"));
     }
 }
