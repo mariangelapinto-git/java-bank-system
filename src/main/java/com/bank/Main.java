@@ -1,246 +1,157 @@
 package com.bank;
 import com.bank.exception.BankException;
-import service.BankService;
+import com.bank.model.*;
+import com.bank.service.BankService;
+import com.bank.service.ReporteService;
+import com.bank.view.VentanaLogin;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import java.awt.EventQueue;
 import java.util.Scanner;
-import model.*;
 
-public class Main {
+@SpringBootApplication
+public class Main implements CommandLineRunner {
+
+    @Autowired
+    private BankService servicio;
+
+    @Autowired
+    private ReporteService reporteService;
+
+    @Autowired
+    private VentanaLogin ventanaLogin;
+
+    private Usuario usuarioLogueado;
+
     public static void main(String[] args) {
+        new SpringApplicationBuilder(Main.class)
+                .headless(false) // Desactivado para permitir Java Swing
+                .run(args);
+    }
 
-        BankService servicio = new BankService();
+    @Override
+    public void run(String... args) {
+        // Inicialización del usuario (Simulación para auditoría y login)
+        this.usuarioLogueado = new Usuario();
+        this.usuarioLogueado.setId(1L);
+        this.usuarioLogueado.setUsername("Admin_User");
+        this.usuarioLogueado.setRol("ADMIN");
+
+        // 1. Lanzamos la interfaz gráfica (Pendiente de lista de GUI)
+        EventQueue.invokeLater(() -> {
+            ventanaLogin.setVisible(true);
+            ventanaLogin.setLocationRelativeTo(null);
+        });
+
+        // 2. Ejecución del Menú de Consola
         Scanner leer = new Scanner(System.in);
-        int usuarioLogueadoId = 3;
         int opcion = 0;
 
-        System.out.println("--- BIENVENIDO AL SISTEMA BANCARIO ---");
+        System.out.println("\n========================================");
+        System.out.println("   BIENVENIDO AL SISTEMA BANCARIO");
+        System.out.println("========================================");
+        System.out.println("Sesión iniciada como: " + usuarioLogueado.getUsername());
 
-        // ==================================SISTEMA DEL LOGIN=====================
-
-        Usuario usuarioLogueado = null;
-
-        // Verificar si la tabla está vacía para crear el primer administrador
-
-        if (servicio.obtenerTotalUsuarios() == 0) {
-            System.out.println("Configuración inicial: Creando usuario administrador...");
-            servicio.registrarUsuario("admin", "1234", "ADMIN");
-            System.out.println("Usuario 'admin' con clave '1234' creado exitosamente.");
-        }
-
-        while (usuarioLogueado == null) {
-            System.out.println("\n--- ACCESO AL SISTEMA BANCARIO ---");
-            System.out.print("Usuario: ");
-            String user = leer.nextLine();
-            System.out.print("Contraseña: ");
-            String pass = leer.nextLine();
-
-            usuarioLogueado = servicio.login(user, pass);
-
-            if (usuarioLogueado == null) {
-                System.out.println("Error: Usuario o contraseña incorrectos.");
-            }
-        }
-        System.out.println("Acceso concedido como: " + usuarioLogueado.getRol());
-
-        System.out.println("Bienvenid@, " + usuarioLogueado.getUsername() + " [" + usuarioLogueado.getRol() + "]");
         do {
-            System.out.println("\n1. Abrir Cuenta Nueva");
-            System.out.println("2. Ver Cuentas (Listar)");
-            System.out.println("3. Cerrar Cuenta (Soft Delete)");
-            System.out.println("4. Consulta de Saldo");
-            System.out.println("5. Deposito Dinero");
-            System.out.println("6. Retiro de Dinero");
-            System.out.println("7. Transferencia");
-            System.out.println("8. Ver extracto bancario");
-            System.out.println("9. Panel de Administración (Auditoría/Reactivar)");
-            System.out.println("10. Generar PDF");
-            System.out.println("11. Ejecutar Cierre de Mes (Intereses)");
-            System.out.println("12. Disponibilidad y limite de la cuenta");
-            System.out.println("13. Evaluar prestamos");
-            System.out.println("14. Salir");
-
+            mostrarMenu();
             opcion = leerEntero(leer, "\nElige una opción: ");
+            if (leer.hasNextLine()) leer.nextLine();
 
-            switch (opcion) {
-                case 1:
-                    // ABRIR CUENTA NUEVA
-                    int id = leerEntero(leer, "Ingrese ID único: ");
-
-                    // CORRECCIÓN AQUÍ: Usamos nextLine() para limpiar el "Enter" del buffer
-                    leer.nextLine();
-
-                    System.out.print("Número de Cuenta: ");
-                    String numCuenta = leer.nextLine();
-
-                    System.out.print("Nombre del Titular: ");
-                    String titular = leer.nextLine();
-
-                    System.out.print("Cédula/RIF: ");
-                    String cedula = leer.nextLine();
-
-                    System.out.print("Dirección: ");
-                    String direccion = leer.nextLine();
-
-                    System.out.print("Teléfono: ");
-                    String telefono = leer.nextLine();
-
-                    double saldoInicial = leerDouble(leer, "Depósito Inicial: ");
-
-                    // Otra limpieza de buffer después de leer un número (leerDouble)
-                    leer.nextLine();
-
-                    System.out.println("\nSeleccione Tipo de Cuenta:");
-                    System.out.println("1. Ahorro (Genera Intereses)");
-                    System.out.println("2. Corriente (Permite Sobregiro)");
-                    System.out.println("3. Nómina (Sin Comisiones)");
-                    int tipoC = leerEntero(leer, "Opción: ");
-                    leer.nextLine(); // Limpiar buffer otra vez
-
-                    Cuenta nuevaCuenta = null;
-
-                    if (tipoC == 1) {
-                        nuevaCuenta = new CuentaAhorro(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
-                    } else if (tipoC == 2) {
-                        nuevaCuenta = new CuentaCorriente(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
-                    } else {
-                        nuevaCuenta = new CuentaNomina(id, numCuenta, titular, cedula, direccion, telefono, saldoInicial);
+            try {
+                switch (opcion) {
+                    case 1 -> crearCuentaMenu(leer);
+                    case 2 -> servicio.obtenerTodasLasCuentas().forEach(c ->
+                            System.out.println("ID: " + c.getId() + " | Nº: " + c.getNumeroCuenta() + " | Saldo: $" + c.getSaldo() + " | Estado: " + c.getEstado()));
+                    case 3 -> {
+                        Long idCerrar = leerLong(leer, "ID de cuenta a cerrar: ");
+                        servicio.cambiarEstadoCuenta(idCerrar, "CERRADO");
                     }
-
-                    if (nuevaCuenta != null) {
-                        servicio.crearCuenta(nuevaCuenta, usuarioLogueado.getId());                    }
-                    break;
-
-                case 2:
-                    servicio.listarCuentas();
-                    break;
-
-                case 3:
-                    int idEliminar = leerEntero(leer, "Ingrese el ID de la cuenta a cerrar: ");
-                    servicio.cerrarCuenta(idEliminar);
-                    break;
-
-                case 4:
-                    int idConsulta = leerEntero(leer, "Ingrese ID para consultar saldo: ");
-                    servicio.consultarSaldo(idConsulta);
-                    break;
-
-                case 5:
-                    int idDep = leerEntero(leer, "Ingrese ID para depositar: ");
-                    double montoDep = leerDouble(leer, "Monto: ");
-                    servicio.depositar(idDep, montoDep);
-                    break;
-
-                case 6: // RETIROS
-                    int idRet = leerEntero(leer, "Ingrese ID de cuenta: ");
-                    double montoRet = leerDouble(leer, "Monto a retirar: ");
-
-                    try {
-                        // 1. Validamos reglas: Si algo está mal, lanzará una BankException y saltará al catch
-                        // IMPORTANTE: Asegúrate de pasar los 3 parámetros que definimos antes
-                        servicio.validarReglasDeRetiro(idRet, montoRet, usuarioLogueadoId);
-
-                        // 2. Si llegó aquí es porque las reglas pasaron, ahora procedemos al retiro
-                        servicio.retirar(idRet, montoRet, usuarioLogueadoId);
-
-                        System.out.println("¡Retiro procesado con éxito!");
-
-                    } catch (BankException e) {
-                        // 3. Aquí se mostrarán todos los errores (Saldo mínimo, límite diario, saldo insuficiente)
-                        System.err.println("ALERTA: " + e.getMessage());
+                    case 4 -> {
+                        Long idCons = leerLong(leer, "ID de cuenta: ");
+                        servicio.consultarCuenta(idCons).ifPresentOrElse(
+                                c -> System.out.println("Saldo actual: $" + c.getSaldo()),
+                                () -> System.out.println("Cuenta no encontrada.")
+                        );
                     }
-                    break;
-
-                case 7: // TRANSFERENCIAS
-                    int idOri = leerEntero(leer, "ID de su cuenta (Origen): ");
-                    leer.nextLine(); // Limpiar buffer
-                    System.out.print("Ingrese el Número de Cuenta Destino (20 dígitos): ");
-                    String numCuentaDes = leer.nextLine();
-                    double montoTrans = leerDouble(leer, "Monto a enviar: ");
-
-                    try {
-                        // 4. Llamamos al método con el ID del usuario logueado
-                        servicio.transferir(idOri, numCuentaDes, montoTrans, usuarioLogueadoId);
-                        System.out.println("Transferencia realizada con éxito.");
-                    } catch (BankException e) {
-                        // 5. Capturamos el error y el usuario verá el motivo exacto
-                        System.err.println("ERROR EN TRANSFERENCIA: " + e.getMessage());
+                    case 5 -> {
+                        Long idDep = leerLong(leer, "ID de cuenta: ");
+                        double montoDep = leerDouble(leer, "Monto a depositar: ");
+                        servicio.depositar(idDep, montoDep);
                     }
-                    break;
-
-                case 8:
-                    int idEx = leerEntero(leer, "ID para historial: ");
-                    servicio.verExtracto(idEx);
-                    break;
-
-                case 9:
-                    if (!usuarioLogueado.getRol().equals("ADMIN")) {
-                        System.out.println("Acceso denegado: Se requieren privilegios de ADMIN.");
-                        break;
+                    case 6 -> {
+                        Long idRet = leerLong(leer, "ID de cuenta: ");
+                        double montoRet = leerDouble(leer, "Monto a retirar: ");
+                        // Pasamos el ID del usuario para el registro de logs [cite: 2025-12-27]
+                        servicio.retirar(idRet, montoRet, usuarioLogueado.getId());
                     }
-
-                    System.out.println("\n--- PANEL DE CONTROL ---");
-                    System.out.println("1. Ver todas las cuentas (Auditoría)");
-                    System.out.println("2. Reactivar una cuenta");
-                    int subOpcion = leerEntero(leer, "Opción: ");
-                    if (subOpcion == 1) servicio.listarTodasLasCuentas();
-                    else if (subOpcion == 2) {
-                        int idRe = leerEntero(leer, "ID a reactivar: ");
-                        servicio.reactivarCuenta(idRe);
+                    case 7 -> {
+                        Long idOri = leerLong(leer, "ID cuenta origen: ");
+                        System.out.print("Número cuenta destino: ");
+                        String cuentaDest = leer.next();
+                        double montoTrans = leerDouble(leer, "Monto: ");
+                        servicio.transferir(idOri, cuentaDest, montoTrans, usuarioLogueado.getId());
                     }
-                    break;
-
-                case 10:
-                    idEx = leerEntero(leer, "Ingrese el ID de la cuenta para generar PDF: ");
-                    servicio.generarReportePDF(idEx); // Cambiamos el método antiguo por el nuevo
-                    break;
-
-                case 11:
-                    if (usuarioLogueado.getRol().equals("ADMIN")) {
-                        servicio.ejecutarInteresesBatch();
-                    } else {
-                        System.out.println("Acceso denegado: Solo el Administrador puede cerrar el mes.");
+                    case 10 -> {
+                        Long idPdf = leerLong(leer, "ID de cuenta para el PDF: ");
+                        reporteService.generarEstadoCuenta(idPdf); // Funcionalidad de reportes reales
                     }
-                    break;
-
-                case 12:
-                    int idInfo = leerEntero(leer, "Ingrese el ID de su cuenta: ");
-                    servicio.mostrarDetallesDeCuenta(idInfo);
-                    break;
-
-                case 13:
-                    int idPre = leerEntero(leer, "Ingrese su ID para evaluar préstamo: ");
-                    servicio.evaluarYOfrecerPrestamo(idPre);
-                    break;
-                case 14:
-                    System.out.println("¡Gracias por usar JavaBank, " + usuarioLogueado.getUsername() + "!");
-                    break;
-                default:
-                    System.out.println("Opción no válida.");
+                    case 11 -> {
+                        if ("ADMIN".equals(usuarioLogueado.getRol())) {
+                            servicio.ejecutarInteresesBatch(); // Sistema de Intereses Batch
+                            System.out.println("Proceso completado.");
+                        } else {
+                            System.out.println("No tienes permisos.");
+                        }
+                    }
+                    case 13 -> {
+                        Long idPre = leerLong(leer, "ID de cuenta: ");
+                        System.out.println(servicio.evaluarPrestamo(idPre)); // Reglas de Préstamos
+                    }
+                    case 14 -> System.out.println("Saliendo...");
+                    default -> System.out.println("Opción inválida.");
+                }
+            } catch (BankException e) {
+                System.err.println("\nALERTA BANCARIA: " + e.getMessage());
+            } catch (Exception e) {
+                System.err.println("\nERROR: " + e.getMessage());
             }
 
         } while (opcion != 14);
-
-        leer.close();
     }
 
-    private static int leerEntero(Scanner leer, String mensaje) {
-        while (true) {
-            try {
-                System.out.print(mensaje);
-                return Integer.parseInt(leer.next());
-            } catch (NumberFormatException e) {
-                System.out.println("Error: Ingresa un número entero.");
-            }
-        }
+    private void mostrarMenu() {
+        System.out.println("\n--- MENÚ PRINCIPAL ---");
+        System.out.println("1. Abrir Cuenta | 2. Listar Cuentas | 3. Cerrar Cuenta");
+        System.out.println("4. Saldo        | 5. Depósito       | 6. Retiro");
+        System.out.println("7. Transferir   | 10. Generar PDF   | 11. Cierre Mes");
+        System.out.println("13. Préstamos   | 14. Salir");
     }
 
-    private static double leerDouble(Scanner leer, String mensaje) {
-        while (true) {
-            try {
-                System.out.print(mensaje);
-                return Double.parseDouble(leer.next());
-            } catch (NumberFormatException e) {
-                System.out.println("Error: Monto inválido.");
-            }
-        }
+    private void crearCuentaMenu(Scanner leer) {
+        System.out.print("Número de Cuenta: ");
+        String num = leer.nextLine();
+        System.out.print("Titular: ");
+        String titular = leer.nextLine();
+        System.out.print("Cédula: ");
+        String cedula = leer.nextLine();
+        double saldo = leerDouble(leer, "Saldo Inicial: ");
+
+        System.out.println("Tipo: 1.Ahorro, 2.Corriente, 3.Nomina");
+        int tipo = leerEntero(leer, "Opción: ");
+
+        Cuenta c = switch (tipo) {
+            case 1 -> new CuentaAhorro(num, titular, cedula, "S/D", "S/D", saldo);
+            case 2 -> new CuentaCorriente(num, titular, cedula, "S/D", "S/D", saldo);
+            default -> new CuentaNomina(num, titular, cedula, "S/D", "S/D", saldo);
+        };
+
+        servicio.crearCuenta(c, usuarioLogueado.getId());
+        System.out.println("Cuenta creada exitosamente.");
     }
+
+    private int leerEntero(Scanner leer, String msg) { System.out.print(msg); return leer.nextInt(); }
+    private Long leerLong(Scanner leer, String msg) { System.out.print(msg); return leer.nextLong(); }
+    private double leerDouble(Scanner leer, String msg) { System.out.print(msg); return leer.nextDouble(); }
 }
