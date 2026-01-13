@@ -1,6 +1,6 @@
 # 📁 Sistema de Gestión Bancaria e Inventario (Java)
 
-Este es un sistema robusto desarrollado en Java que integra operaciones bancarias avanzadas, gestión de inventarios y módulos de seguridad. El proyecto está diseñado bajo principios de programación orientada a objetos (**POO**) y actualmente se encuentra en transición hacia una arquitectura profesional con persistencia de datos.
+Este es un sistema robusto desarrollado en Java que integra operaciones bancarias avanzadas, gestión de inventarios y módulos de seguridad. El proyecto está diseñado bajo principios de programación orientada a objetos (**POO**) 
 
 ---
 
